@@ -1,0 +1,23 @@
+[Unit]
+# The mcp capability's own process: index, health, 410s, later OAuth discovery.
+# A USER unit, like the company map's: with lingering on it starts at boot, and
+# `systemctl --user restart labs-mcp` needs no sudo.
+Description=ABC Legacy Labs — mcp capability (gateway)
+Documentation=https://github.com/abclegacyllc/labs/tree/main/platform/mcp
+After=network-online.target
+Wants=network-online.target
+# Restart on crash (below) but not forever: five failures in five minutes and it stays down, visibly.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=%h/labs
+# .env is read by node, not by systemd's EnvironmentFile: one parser, one meaning.
+ExecStart=/usr/bin/node --env-file-if-exists=.env platform/mcp/server.mjs
+NoNewPrivileges=yes
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

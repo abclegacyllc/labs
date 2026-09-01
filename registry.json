@@ -1,0 +1,22 @@
+{
+  "site": {
+    "name": "ABC Legacy Labs",
+    "tagline": "The incubator of ABC LEGACY LLC: shared services a small project can rent, and the experiments renting them — released early, graduated or archived within weeks.",
+    "company": "ABC LEGACY LLC",
+    "companyUrl": "https://abclegacyllc.com",
+    "labsUrl": "https://labs.abclegacyllc.com",
+    "mcpUrl": "https://mcp.abclegacyllc.com",
+    "repo": "https://github.com/abclegacyllc/labs",
+    "feedback": "https://github.com/abclegacyllc/labs/issues"
+  },
+  "projects": [
+    {
+      "id": "debug-overlay",
+      "repo": "https://github.com/ABC-LEGACY-LLC/debug-overlay"
+    },
+    {
+      "id": "skills",
+      "repo": "https://github.com/AlonurKomilov/skills"
+    }
+  ]
+}

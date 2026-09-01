@@ -1,0 +1,22 @@
+{
+  "labs": 1,
+  "export": {
+    "id": "toolkit",
+    "name": "Toolkit",
+    "tagline": "A pack of Claude Code skills any repository can take: copied in, pinned, yours.",
+    "kind": "resource",
+    "category": "knowledge",
+    "surfaces": { "ai": { "format": "agent-skill" } },
+    "tags": ["ux", "example"],
+    "status": "beta",
+    "started": "2026-08-24",
+    "install": {
+      "include": ["ux-audit-*", "ux-sourcing-component"],
+      "link": { ".claude/skills/{name}": "abc-labs/toolkit/{name}" }
+    },
+    "links": {
+      "docs": "https://github.com/<owner>/<repo>#readme",
+      "feedback": "https://github.com/<owner>/<repo>/issues"
+    }
+  }
+}

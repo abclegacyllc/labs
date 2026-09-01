@@ -1,0 +1,32 @@
+# Push to main → ssh to the server → ./infra/deploy.sh
+#
+# Off until the repository variable DEPLOY_ENABLED is "true" and these secrets exist:
+#   DEPLOY_HOST         the server (IP or name)
+#   DEPLOY_USER         the deploy user on it (labs)
+#   DEPLOY_SSH_KEY      a private key whose public half is in that user's authorized_keys
+#   DEPLOY_KNOWN_HOSTS  output of `ssh-keyscan -H <host>` — pins the host key, no TOFU
+#
+# The server needs no GitHub credential: the repo is public, `git pull` is plain https.
+name: deploy
+on:
+  push:
+    branches: [main]
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy -o StrictHostKeyChecking=yes "$USER@$HOST" 'cd ~/labs && ./infra/deploy.sh'

@@ -1,0 +1,11 @@
+{
+  "id": "mcp",
+  "name": "MCP hosting",
+  "summary": "A path on mcp.abclegacyllc.com for a project's MCP server: TLS, routing, the public index, 410 on retirement — and, when a tool ever needs identity, OAuth at the gateway so the project never implements it.",
+  "status": "alpha",
+  "public": "https://mcp.abclegacyllc.com",
+  "provides": ["MCP_PATH", "MCP_PUBLIC_URL"],
+  "options": {
+    "upstream": "optional — https://host:port when the server runs somewhere other than this machine (a graduated project keeps its endpoint this way)"
+  }
+}

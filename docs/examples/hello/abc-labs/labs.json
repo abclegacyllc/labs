@@ -1,0 +1,26 @@
+{
+  "labs": 1,
+  "export": {
+    "id": "hello",
+    "name": "Hello",
+    "tagline": "One sentence a stranger understands — what the project does, not what it is built with.",
+    "kind": "service",
+    "category": "api",
+    "surfaces": { "mcp": {} },
+    "tags": ["example"],
+    "license": "MIT",
+    "status": "building",
+    "started": "2026-09-01",
+    "uses": {
+      "host": { "install": "npm ci --omit=dev", "start": "node server.mjs" },
+      "mcp": {}
+    },
+    "links": {
+      "docs": "https://github.com/<owner>/<repo>#readme",
+      "feedback": "https://github.com/<owner>/<repo>/issues"
+    }
+  },
+  "import": {
+    "toolkit": "*"
+  }
+}

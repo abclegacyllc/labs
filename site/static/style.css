@@ -1,0 +1,76 @@
+:root {
+  color-scheme: light dark;
+  --bg: #fafaf7; --fg: #1a1a1a; --muted: #6b6b66; --line: #e3e2dc; --card: #ffffff; --code: #f0efe9;
+  --building: #8a6d3b; --alpha: #a3421c; --beta: #1f5f8b; --graduated: #2e6b3a; --archived: #777;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #131313; --fg: #ececec; --muted: #9a9a94; --line: #2a2a2a; --card: #1c1c1c; --code: #242424; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: inherit; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .92em; }
+.masthead, main, .legend, .colophon { max-width: 56rem; margin: 0 auto; padding: 0 1.25rem; }
+.masthead { padding-top: 3rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--line); }
+.brand { margin: 0; color: var(--muted); font-size: .9rem; letter-spacing: .02em; }
+.brand a { text-decoration: none; }
+h1 { margin: .25rem 0 .5rem; font-size: 2.25rem; line-height: 1.15; }
+.lede { margin: 0 0 .75rem; font-size: 1.1rem; max-width: 40rem; }
+.meta { margin: 0; color: var(--muted); font-size: .9rem; }
+main { display: grid; gap: 1.25rem; padding-top: 2rem; padding-bottom: 2rem; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem 1.5rem; }
+.card header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.card h2 { margin: 0; font-size: 1.3rem; }
+.card h2 a { text-decoration: none; }
+.tagline { margin: .5rem 0 1rem; }
+.status { display: inline-block; padding: .1rem .55rem; border-radius: 999px; font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #fff; }
+.status-building { background: var(--building); } .status-alpha { background: var(--alpha); }
+.status-beta { background: var(--beta); } .status-graduated { background: var(--graduated); } .status-archived { background: var(--archived); }
+.label { margin: .75rem 0 .2rem; color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; }
+.endpoint, pre { display: block; background: var(--code); padding: .6rem .8rem; border-radius: 8px; overflow-x: auto; margin: 0; }
+.hint, .soon { margin: .2rem 0 0; color: var(--muted); }
+.card footer { display: flex; gap: 1.25rem; align-items: baseline; margin-top: 1.25rem; padding-top: .75rem; border-top: 1px solid var(--line); font-size: .9rem; }
+.since { margin-left: auto; color: var(--muted); }
+.legend { padding-bottom: 2rem; }
+.legend h2 { font-size: 1rem; color: var(--muted); }
+.legend dl { display: grid; grid-template-columns: max-content 1fr; gap: .5rem 1rem; align-items: baseline; margin: 0; }
+.legend dd { margin: 0; }
+.colophon { padding: 1.5rem 1.25rem 3rem; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); }
+
+/* two layers */
+.layer { padding: 2rem 0 .5rem; }
+.layer + .layer { border-top: 1px solid var(--line); }
+.layer h2 { margin: 0 0 1rem; font-size: 1.15rem; display: flex; flex-wrap: wrap; gap: .6rem; align-items: baseline; }
+.layer h2 small { font-weight: 400; color: var(--muted); font-size: .9rem; }
+.layer .card + .card { margin-top: 1.25rem; }
+.card h3 { margin: 0; font-size: 1.25rem; }
+.card h3 a { text-decoration: none; }
+.card.service { border-style: dashed; }
+.rents { color: var(--muted); }
+.soon.late { color: var(--alpha); font-weight: 600; }
+.open { word-break: break-all; }
+.empty { color: var(--muted); padding: 1rem 0; }
+main { display: block; }
+
+/* project pages */
+.masthead h1 .status { vertical-align: middle; font-size: .7rem; margin-left: .4rem; }
+.card.page { margin-top: 2rem; }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: .45rem 1.25rem; margin: 1.25rem 0 0; align-items: baseline; }
+.facts dt { color: var(--muted); font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+.note { margin: .2rem 0 0; }
+
+/* three levels: kind › category › project */
+.kind > h2 { font-size: 1.35rem; }
+.shelf { margin: 1.25rem 0 0; padding-left: .9rem; border-left: 3px solid var(--line); }
+.shelf h3 { margin: 0 0 .75rem; font-size: 1rem; display: flex; flex-wrap: wrap; gap: .6rem; align-items: baseline; }
+.shelf h3 small { font-weight: 400; color: var(--muted); font-size: .85rem; }
+.card h4 { margin: 0; font-size: 1.2rem; }
+.card h4 a { text-decoration: none; }
+.meta-badges { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; justify-content: flex-end; }
+.chip { display: inline-block; padding: .05rem .5rem; border: 1px solid var(--line); border-radius: 999px; font-size: .75rem; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.kindcat { color: var(--muted); font-size: .85rem; text-decoration: none; }
+.kindcat:hover { text-decoration: underline; }
+.tags { margin: .9rem 0 0; }
+.tag { color: var(--muted); font-size: .85rem; margin-right: .5rem; }
+.card.capability { border-style: dashed; }

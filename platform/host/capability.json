@@ -1,0 +1,11 @@
+{
+  "id": "host",
+  "name": "Hosting",
+  "summary": "Labs runs your process on its server: a loopback port that is yours for the life of the id, a systemd unit that brings it back after a crash, environment injected at start, logs in the journal. Caddy is the only thing that talks to it.",
+  "status": "alpha",
+  "provides": ["PORT", "HOST", "LABS_ID", "NODE_ENV"],
+  "options": {
+    "start": "required — the command that starts your server, run in your checkout, e.g. node server.mjs",
+    "install": "optional — run before start on every deploy, e.g. npm ci --omit=dev"
+  }
+}
