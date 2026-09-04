@@ -67,7 +67,13 @@ function reach(p) {
     return `<p class="soon${late ? " late" : ""}">${late ? "Overdue —" : "Not callable yet —"} alpha by <time datetime="${esc(alphaBy(p.started))}">${esc(alphaBy(p.started))}</time>.</p>`;
   }
   if (p.status === "archived") return `<p class="soon">Retired.${p.surfaces?.mcp ? " The endpoint answers <code>410 Gone</code>." : ""}</p>`;
-  const rows = Object.keys(SURFACES).filter((s) => p.surfaces?.[s]).map((s) => whereRow(p, s, p.surfaces[s]));
+  const rows = Object.keys(SURFACES)
+    .filter((s) => p.surfaces?.[s])
+    // `ai` and `import` are one act — files vendored into abc-labs/<id>/ — plus one
+    // extra fact: which AI reads them. Both blocks would print the same command
+    // twice, so the richer one stands for both.
+    .filter((s) => !(s === "import" && p.surfaces.ai))
+    .map((s) => whereRow(p, s, p.surfaces[s]));
   return rows.join("\n    ") || `<p class="hint">See the repository for how to use it.</p>`;
 }
 
