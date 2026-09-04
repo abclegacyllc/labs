@@ -42,7 +42,7 @@ that does not (§3).
   "labs": 1,
 
   "export": {
-    "id": "<lowercase-id: ^[a-z][a-z0-9-]{1,30}$ — becomes the URL path everywhere, never changes; name WHAT IT IS, never a capability it rents: hello, not hello-mcp>",
+    "id": "<THIS PROJECT's id — yours to choose, never assigned by Labs. ^[a-z][a-z0-9-]{1,30}$; becomes the URL path everywhere and never changes; name WHAT IT IS, never how it is delivered: hello, not hello-mcp. Need not match the repository name>",
     "name": "<Display name — may change later>",
     "tagline": "<One sentence a stranger understands: what it does, not what it is built with>",
 
@@ -251,7 +251,7 @@ Commit `abc-labs/labs.json`. Then give the owner exactly this:
 ## Self-check before you finish
 
 - [ ] `abc-labs/labs.json` is the only Labs-related change; no secrets in it
-- [ ] `id` is lowercase, stable, and names what the project *is*
+- [ ] `id` is this project's own — lowercase, stable, and names what the project *is*
 - [ ] `kind` and `category` agree (§3); exactly one category; every listed surface is allowed for it (§3, last column)
 - [ ] every surface works today and carries its fields
 - [ ] `mcp` surface ⇄ `uses.mcp`; `ai`/`import` surface ⇄ `install` — both present or both absent

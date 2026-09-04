@@ -15,7 +15,26 @@ Type=simple
 WorkingDirectory=%h/labs
 # .env is read by node, not by systemd's EnvironmentFile: one parser, one meaning.
 ExecStart=/usr/bin/node --env-file-if-exists=.env platform/mcp/server.mjs
+
+# The gateway reads var/registry.d and registry.json and writes nothing at all,
+# so it runs with the filesystem read-only and no write path declared. Same set
+# as project.service.tmpl gives a guest — the platform should not be the softest
+# thing on the machine.
+# Two protections a USER manager cannot apply on this kernel — both need
+# capabilities systemd cannot drop without privileges, and the unit dies with
+# 218/CAPABILITIES: PrivateDevices= and ProtectKernelModules=. Do not add them
+# back without starting the unit and reading its status.
 NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+UMask=0077
+
 Restart=on-failure
 RestartSec=5
 

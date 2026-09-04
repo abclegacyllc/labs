@@ -116,6 +116,9 @@ install:
 	@for u in $(PLATFORM_UNITS) $(PLATFORM_ONESHOT) $(PLATFORM_TIMERS); do cp infra/systemd/$$u '$(UNIT_DIR)'/$$u && echo "  $$u"; done
 	@systemctl --user daemon-reload
 	@systemctl --user enable --now $(PLATFORM_UNITS) $(PLATFORM_TIMERS)
+	@# Copying a unit changes nothing until it restarts — that is how a broken
+	@# hardening directive stayed invisible for three days.
+	@systemctl --user restart $(PLATFORM_UNITS)
 	@if [ "$$(loginctl show-user "$$USER" -p Linger --value 2>/dev/null)" != yes ]; then \
 		echo; echo "  NOTE: lingering is off — these will NOT start at boot."; \
 		echo "        Once, as root:  loginctl enable-linger $$USER"; \

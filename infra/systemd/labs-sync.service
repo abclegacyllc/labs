@@ -15,4 +15,21 @@ Wants=network-online.target
 Type=oneshot
 WorkingDirectory=%h/labs
 ExecStart=/usr/bin/node --env-file-if-exists=.env bin/labs.mjs sync
+
+# Unlike the gateway this one writes: var/ (listings, routes, the Caddyfile) and
+# site/dist (the catalog). Those two paths, nothing else — and UMask 0022 because
+# Caddy, running as another user, has to read what it renders.
 NoNewPrivileges=yes
+PrivateTmp=yes
+# ProtectSystem=strict already mounts the whole hierarchy read-only, home
+# included, so these two paths are the only writable ones. (No BindPaths or
+# ProtectHome=tmpfs here: both need privileges a user manager does not have —
+# the unit fails with 218/CAPABILITIES.)
+ProtectSystem=strict
+ReadWritePaths=%h/labs/var %h/labs/site/dist
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+UMask=0022

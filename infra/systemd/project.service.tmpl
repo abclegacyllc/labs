@@ -15,16 +15,18 @@ WorkingDirectory={{dir}}
 # unlike a hand-written .env, which node and systemd would read differently.
 EnvironmentFile={{envfile}}
 ExecStart=/bin/sh -c 'exec {{start}}'
+# Two protections a USER manager cannot apply on this kernel — both need
+# capabilities systemd cannot drop without privileges, and the unit dies with
+# 218/CAPABILITIES: PrivateDevices= and ProtectKernelModules=. Do not add them
+# back without starting the unit and reading its status.
 NoNewPrivileges=yes
 # Baseline sandboxing: a guest can write only its own checkout and cannot
 # modify the host OS, devices, kernel settings or namespaces. Full home-directory
 # confidentiality still requires running guests as a dedicated user/container.
 PrivateTmp=yes
-PrivateDevices=yes
 ProtectSystem=strict
 ReadWritePaths={{dir}}
 ProtectKernelTunables=yes
-ProtectKernelModules=yes
 ProtectControlGroups=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
