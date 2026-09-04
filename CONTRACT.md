@@ -143,8 +143,10 @@ nothing on their own; the AI that reads them is what works. That AI is the
 | `bot` | a chat | `url` |
 | `download` | a file you fetch | `url` |
 
-List only surfaces that work today. A planned one is a sentence in your README;
-when it ships, it is one more line here and the card grows a row.
+All surface and link URLs must be absolute HTTPS URLs. `javascript:`, `data:`, local
+files, credentials and control characters are rejected. List only surfaces that
+work today. A planned one is a sentence in your README; when it ships, it is one
+more line here and the card grows a row.
 
 The `ai` surface names a **format**, not a host: `agent-skill` (a folder with
 `SKILL.md`) runs in Claude Code, claude.ai and the Claude API; `agents-md` in any
@@ -181,7 +183,10 @@ user unit, starts `uses.host.start` in your checkout. Your process receives:
 | + whatever each other rented capability provides | below |
 
 Your own secrets are *your* `.env` inside your checkout, which Labs never reads
-and never commits. Logs: `journalctl --user -u labs-project-<id>`.
+and never commits. The generated unit applies a baseline systemd sandbox: private
+tmp/devices, a read-only host filesystem except the project checkout, and no
+new privileges. For full separation between guest code and the operator home, run
+Labs under a dedicated Linux user or a rootless container. Logs: `journalctl --user -u labs-project-<id>`.
 
 ### Renting `mcp` — an endpoint on the MCP domain
 
@@ -202,7 +207,8 @@ you never implement either.
 `alpha`, it is never renamed or reused. A breaking change is a new id (`hello2`)
 with the old one kept alive for a deprecation window. Running somewhere else?
 `"uses": { "mcp": { "upstream": "https://your-host" } }` and Labs proxies to you
-— also how a graduated project keeps its endpoint.
+— also how a graduated project keeps its endpoint. The upstream must be an
+external HTTPS host; loopback/private addresses and control characters are rejected.
 
 ### `install` — letting other repositories take you
 
@@ -245,7 +251,7 @@ files are yours now: they build offline, survive Labs going away, and a later
 |---|---|
 | `abc-labs/labs.json` `import` | `{"toolkit": "*"}` — what you take, at which ref. Edit by hand or via the CLI |
 | `abc-labs/labs.lock.json` | `{"toolkit": {"repo", "ref", "commit", "installedAt"}}` — the CLI's, never by hand |
-| `abc-labs/<id>/` | the files. Re-created on every `update`; do not edit in place — send the change upstream |
+| `abc-labs/<id>/` | the files. Re-created atomically on every `update`; do not edit in place — send the change upstream |
 
 Trust: an import runs nothing, it copies. What it copies is pinned to a commit
 you can read in the lock, from a repository the Labs allowlist vouches for, into

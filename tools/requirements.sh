@@ -50,9 +50,37 @@ if [ -f .env ]; then green ".env present"
 else warn ".env not present — defaults are used (see .env.example)"; notes+=("cp .env.example .env"); fi
 
 main=/etc/caddy/Caddyfile
-if [ -f "$main" ] && grep -q "$PWD/infra/Caddyfile" "$main" 2>/dev/null; then green "caddy imports $PWD/infra/Caddyfile"
-else warn "caddy does not import this checkout's Caddyfile — the public hostnames will not be served"
-  notes+=("echo 'import $PWD/infra/Caddyfile' | sudo tee -a $main && sudo systemctl reload caddy"); fi
+line="import $PWD/var/Caddyfile"
+imports=$(grep -cxF "$line" "$main" 2>/dev/null || true)
+if [ "${imports:-0}" -eq 1 ]; then green "caddy imports $PWD/var/Caddyfile"
+elif [ "${imports:-0}" -gt 1 ]; then
+  red "caddy imports it $imports times — the config on disk is INVALID (ambiguous site definition)"
+  red "  it is serving whatever it loaded first; the next restart would fail"
+  notes+=("sudo sed -i '\\|^$line\$|d' $main && echo '$line' | sudo tee -a $main")
+  notes+=("caddy validate --adapter caddyfile --config $main && sudo systemctl reload caddy")
+else
+  warn "caddy does not import this checkout's Caddyfile — the public hostnames will not be served"
+  notes+=("make render   # writes var/Caddyfile")
+  notes+=("echo '$line' | sudo tee -a $main && sudo systemctl reload caddy")
+fi
+
+# What is actually on the air, which can differ from the file after a failed reload.
+if command -v curl >/dev/null 2>&1; then
+  live=$(curl -s --max-time 2 http://127.0.0.1:2019/config/apps/http/servers 2>/dev/null)
+  case "$live" in
+    *"$(node -p 'new URL(process.env.LABS_URL||require("./registry.json").site.labsUrl).host' 2>/dev/null)"*)
+      green "the running caddy is serving the Labs hostnames" ;;
+    "") warn "caddy admin API not answering on 127.0.0.1:2019 — cannot tell what is on the air" ;;
+    *)  warn "the running caddy does NOT serve the Labs hostnames yet — reload it" ;;
+  esac
+fi
+
+# Caddy runs as its own user and must be able to walk down to site/dist. o+x on
+# the home directory grants traversal only — the directory still cannot be listed.
+home=$(dirname "$PWD")
+if [ "$(stat -c '%A' "$home" | cut -c10)" = x ]; then green "$home is traversable by caddy"
+else warn "$home is not traversable by caddy — the catalog would answer 403"
+  notes+=("sudo chmod o+x $home   # traversal only; the directory still cannot be listed"); fi
 
 if [ ${#notes[@]} -gt 0 ]; then
   echo

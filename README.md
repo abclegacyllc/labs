@@ -94,7 +94,7 @@ platform/<id>/         a capability: capability.json, provision.mjs, routes.mjs,
 bin/labs               the CLI: sync · deploy · render · list (platform) — export · import · update (any repo)
 lib/registry.mjs       paths, vocabulary, manifest validation — shared by everything
 site/                  the catalog renderer (zero dependencies)
-infra/                 Caddyfile, platform units, the project unit template, deploy.sh
+infra/                 Caddyfile.tmpl (rendered to var/Caddyfile), platform units + the nightly sync timer, project unit template, deploy.sh
 tools/                 requirements.sh (what a machine needs), check-docs.mjs (drift + format)
 var/                   gitignored — what is actually true on this machine (see below)
 ```
@@ -126,6 +126,9 @@ make dev             # the gateway in the foreground on port 18800, for poking w
 Platform and projects are separate units — `labs-mcp.service` and one
 `labs-project-<id>.service` per guest — so `make platform-stop` leaves the
 projects running, and a project restarting never touches the gateway.
+`labs-sync.timer` runs `make sync` nightly, so a project that pushes a change to
+its `abc-labs/labs.json` is on the catalog by morning without anyone touching
+this machine.
 
 ## The CLI
 
@@ -152,24 +155,30 @@ syntax checks, a render, and `caddy validate`.
 
 ## Deploy
 
-Production is a Linux user of its own, `labs`, on the same server as the rest of
-the company, behind the Caddy that is already there. Once, as root:
+Labs runs behind the Caddy already on the machine, from wherever it is checked
+out — `var/Caddyfile` is rendered with that path and with the hostnames from
+`registry.json`, so nothing in git names a particular server. Root is needed
+exactly twice, once per machine (`make caddy` prints these with the real paths):
 
 ```bash
-sudo adduser --disabled-password --gecos "" labs
-sudo loginctl enable-linger labs                     # user units start at boot
-sudo chmod o+x /home/labs                            # Caddy may traverse to site/dist (no listing)
-sudo -u labs -H git clone https://github.com/abclegacyllc/labs.git /home/labs/labs
-echo 'import /home/labs/labs/infra/Caddyfile' | sudo tee -a /etc/caddy/Caddyfile
+sudo chmod o+x "$(dirname "$PWD")"                      # Caddy may traverse to site/dist; no listing
+echo "import $PWD/var/Caddyfile" | sudo tee -a /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 
-Then, as `labs`, no sudo — the platform:
+Everything after that is sudo-free — user units under lingering, and `caddy
+reload` through the local admin API:
 
 ```bash
-cd ~/labs && make requirements        # is anything missing?
-./infra/deploy.sh                     # pull, units, sync, render — the same steps as make
+make requirements                     # is anything missing?
+make install && make sync             # units, then listings + catalog + routes
+./infra/deploy.sh                     # what CI runs: pull, then the same steps
 ```
+
+Running it under a Linux user of its own (`labs`, with `loginctl enable-linger
+labs`) is the stronger setup — a guest project then cannot read the home
+directory of whoever owns the rest of the machine. It is the same commands with
+`sudo -u labs -i` in front.
 
 and each hosted guest, when its author asks:
 

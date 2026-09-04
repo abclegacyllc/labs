@@ -12,16 +12,20 @@ SHELL := /bin/bash
 LABS  := bin/labs
 REQ   := tools/requirements.sh
 
-# Every unit this repository owns, platform first.
-PLATFORM_UNITS := $(notdir $(wildcard infra/systemd/labs-*.service))
-UNIT_DIR       := $(if $(XDG_CONFIG_HOME),$(XDG_CONFIG_HOME),$(HOME)/.config)/systemd/user
-PROJECT_UNITS   = $(shell systemctl --user list-unit-files 'labs-project-*.service' --no-legend 2>/dev/null | awk '{print $$1}')
-UNITS           = $(PLATFORM_UNITS) $(PROJECT_UNITS)
+# Every unit this repository owns. A .timer's matching .service is a one-shot job
+# the timer fires (labs-sync); it is installed but never enabled or started on
+# its own — so it is kept out of PLATFORM_UNITS, which are the long-running ones.
+PLATFORM_TIMERS  := $(notdir $(wildcard infra/systemd/labs-*.timer))
+PLATFORM_ONESHOT := $(PLATFORM_TIMERS:.timer=.service)
+PLATFORM_UNITS   := $(filter-out $(PLATFORM_ONESHOT),$(notdir $(wildcard infra/systemd/labs-*.service)))
+UNIT_DIR         := $(if $(XDG_CONFIG_HOME),$(XDG_CONFIG_HOME),$(HOME)/.config)/systemd/user
+PROJECT_UNITS     = $(shell systemctl --user list-unit-files 'labs-project-*.service' --no-legend 2>/dev/null | awk '{print $$1}')
+UNITS             = $(PLATFORM_UNITS) $(PROJECT_UNITS)
 GATEWAY_PORT   ?= 8800
 
 .DEFAULT_GOAL := help
 .PHONY: help requirements setup install uninstall start stop restart status logs tail \
-        sync deploy render list check dev clean nuke platform-start platform-stop
+        sync deploy render list check dev clean nuke platform-start platform-stop caddy
 
 help:
 	@echo ''
@@ -37,7 +41,7 @@ help:
 	@echo '    make tail            follow every unit live (ctrl-c to leave)'
 	@echo ''
 	@echo '  The catalog and the projects'
-	@echo '    make sync            read every allowlisted repo'"'"'s abc-labs/labs.json, then render'
+	@echo '    make sync            read every allowlisted repo'"'"'s abc-labs/labs.json, then render (also nightly, by timer)'
 	@echo '    make deploy ID=<id>  clone/pull one guest project, provision, start it'
 	@echo '    make render          rebuild routes, catalog, pages and index.json'
 	@echo '    make list            what is listed, where it runs, what it rents'
@@ -50,6 +54,7 @@ help:
 	@echo '  Setting up a machine'
 	@echo '    make requirements    what this box has and what it is missing'
 	@echo '    make setup           install whatever is missing (asks for sudo)'
+	@echo '    make caddy           the two lines root types once to serve the public hostnames'
 	@echo ''
 	@echo '  Platform only, when a project must keep running: make platform-start, platform-stop'
 	@echo ''
@@ -66,6 +71,41 @@ requirements:
 setup:
 	@$(REQ) install
 
+# Everything after this is sudo-free; these two lines are the exception, and they
+# are typed once per machine. `make render` writes var/Caddyfile; the system Caddy
+# is told to import it, and from then on Labs reloads Caddy over its admin API.
+caddy:
+	@$(LABS) render --no-reload >/dev/null
+	@main=/etc/caddy/Caddyfile; line="import $$PWD/var/Caddyfile"; \
+	n=$$(grep -cxF "$$line" $$main 2>/dev/null || true); n=$${n:-0}; \
+	echo ''; \
+	if [ "$$n" = 1 ]; then \
+		echo "  Already wired — $$main imports $$PWD/var/Caddyfile"; \
+		echo '  Nothing to do here; changes reach Caddy through make render.'; \
+	elif [ "$$n" -gt 1 ]; then \
+		echo "  PROBLEM: that import appears $$n times in $$main."; \
+		echo '  Caddy is running on the config it loaded first, but the file on disk is invalid'; \
+		echo '  and the next restart or reboot would take every site on this machine down.'; \
+		echo ''; \
+		echo '  Fix, as root (idempotent — removes every copy, adds one):'; \
+		echo ''; \
+		echo "    sudo sed -i '\\|^$$line\$$|d' $$main"; \
+		echo "    echo '$$line' | sudo tee -a $$main"; \
+		echo "    caddy validate --adapter caddyfile --config $$main && sudo systemctl reload caddy"; \
+	else \
+		echo '  Once, as root:'; \
+		echo ''; \
+		echo "    sudo chmod o+x $$(dirname $$PWD)"; \
+		echo "    echo '$$line' | sudo tee -a $$main"; \
+		echo '    sudo systemctl reload caddy'; \
+		echo ''; \
+		echo '  Run it ONCE — appending it twice makes the config ambiguous and Caddy'; \
+		echo '  refuses to start. `make caddy` again will tell you if that happened.'; \
+		echo ''; \
+		echo '  Then: make install && make sync'; \
+	fi; \
+	echo ''
+
 # ── the units ─────────────────────────────────────────────────
 
 # Copies the platform units into the user's systemd directory and enables them.
@@ -73,9 +113,9 @@ setup:
 # left alone here.
 install:
 	@mkdir -p '$(UNIT_DIR)'
-	@for u in $(PLATFORM_UNITS); do cp infra/systemd/$$u '$(UNIT_DIR)'/$$u && echo "  $$u"; done
+	@for u in $(PLATFORM_UNITS) $(PLATFORM_ONESHOT) $(PLATFORM_TIMERS); do cp infra/systemd/$$u '$(UNIT_DIR)'/$$u && echo "  $$u"; done
 	@systemctl --user daemon-reload
-	@systemctl --user enable --now $(PLATFORM_UNITS)
+	@systemctl --user enable --now $(PLATFORM_UNITS) $(PLATFORM_TIMERS)
 	@if [ "$$(loginctl show-user "$$USER" -p Linger --value 2>/dev/null)" != yes ]; then \
 		echo; echo "  NOTE: lingering is off — these will NOT start at boot."; \
 		echo "        Once, as root:  loginctl enable-linger $$USER"; \
@@ -85,8 +125,8 @@ install:
 # Hands the platform back. Deployed projects keep running: they are separate
 # units, and stopping someone else's project is never a side effect here.
 uninstall:
-	@systemctl --user disable --now $(PLATFORM_UNITS) 2>&1 | sed 's/^/  /' || true
-	@for u in $(PLATFORM_UNITS); do rm -f '$(UNIT_DIR)'/$$u; done
+	@systemctl --user disable --now $(PLATFORM_UNITS) $(PLATFORM_TIMERS) 2>&1 | sed 's/^/  /' || true
+	@for u in $(PLATFORM_UNITS) $(PLATFORM_ONESHOT) $(PLATFORM_TIMERS); do rm -f '$(UNIT_DIR)'/$$u; done
 	@systemctl --user daemon-reload
 	@echo "  platform units removed. Projects were left running — make stop to stop everything."
 
@@ -120,6 +160,12 @@ status:
 		state=$$(systemctl --user is-active $$u 2>/dev/null); \
 		since=$$(systemctl --user show $$u -p ActiveEnterTimestamp --value 2>/dev/null | cut -d' ' -f2-3); \
 		printf '    %-34s %-10s %s\n' "$$u" "$$state" "$$since"; \
+	done
+	@for t in $(PLATFORM_TIMERS); do \
+		state=$$(systemctl --user is-active $$t 2>/dev/null); \
+		next=$$(systemctl --user show $$t -p NextElapseUSecRealtime --value 2>/dev/null | cut -d' ' -f2-3); \
+		last=$$(systemctl --user show $${t%.timer}.service -p ExecMainExitTimestamp --value 2>/dev/null | cut -d' ' -f2-3); \
+		printf '    %-34s %-10s next %s%s\n' "$$t" "$$state" "$${next:-—}" "$${last:+  (last run $$last)}"; \
 	done
 	@echo ''
 	@echo '  Gateway'

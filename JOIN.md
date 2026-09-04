@@ -121,7 +121,9 @@ surface (§4), which is where the AI comes in.
 ## 4. Choose `surfaces` — where a stranger meets it, with what they need
 
 List every surface that **works today**; a planned one is a sentence in the
-README, not an entry. Each surface is a key with the fields shown:
+README, not an entry. Surface and link URLs must be absolute HTTPS URLs (no
+`javascript:`, `data:`, local files, credentials or control characters). Each
+surface is a key with the fields shown:
 
 | surface | where | write |
 |---|---|---|
@@ -180,7 +182,8 @@ A repository that already ships to real users is `beta`, not `building`.
 ```
 
 Served somewhere else already? `"mcp": { "upstream": "https://<your host>" }` and
-no `host`. A userscript, a skill pack, a dataset rent nothing — omit `uses`.
+no `host`. The upstream must be an external HTTPS host; private/loopback hosts
+are rejected. A userscript, a skill pack, a dataset rent nothing — omit `uses`.
 
 ## 7. `install` — only with an `ai` or `import` surface
 
@@ -190,6 +193,12 @@ no `host`. A userscript, a skill pack, a dataset rent nothing — omit `uses`.
   "link":    { "<dest in the taking repo, {name} = each copied top-level entry>": "abc-labs/<id>/{name}" }
 }
 ```
+
+**Match folders, not the files inside them.** A matched folder travels whole —
+`SKILL.md` *and* whatever sits next to it (`references/`, `tools/`, data). A glob
+like `ux-*/SKILL.md` looks right and silently strips all of that. The validator
+(§8) prints what your globs match and how many files travel; read that list and
+make sure every nested resource is in it.
 
 For an Agent Skills pack (`"ai": { "format": "agent-skill" }`) the link is almost
 always `".claude/skills/{name}": "abc-labs/<id>/{name}"` — that is where Claude
@@ -204,7 +213,24 @@ From the repository root, with node ≥ 22:
 npx github:abclegacyllc/labs export
 ```
 
-Read every line it prints and fix the file until it says `valid`. It knows
+Where the Labs repository is already on the machine — or has not been published
+yet — the same check is `node <labs>/bin/labs.mjs export abc-labs/labs.json`,
+run from anywhere.
+
+Read every line it prints and fix the file until it says `valid`. Read the
+summary line too: it names the kind, category and surfaces it understood, and
+that is your last chance to notice it understood something you did not mean.
+With an `install` block it also lists what your globs would hand an importer —
+entries and file counts — and warns when the globs match files instead of their
+folders.
+
+**Where to run this.** JOIN.md, the validator and the Labs checkout live
+together. If you are working *on the Labs server*, in the repository's own
+checkout, everything above works as written. If you are somewhere else — a
+claude.ai session, another machine — you cannot read `/home/…/labs/` and cannot
+run its validator: either do the work from a Claude Code session on that server,
+or wait until Labs is published and use the raw GitHub URL of this file and
+`npx github:abclegacyllc/labs export`. Do not guess the tables from memory. It knows
 things this page cannot repeat for every case (category ⇄ surface fit, `mcp` ⇄
 `uses.mcp`, `install` ⇄ `ai`/`import`, field types).
 

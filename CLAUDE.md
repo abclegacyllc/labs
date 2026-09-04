@@ -71,8 +71,10 @@ platform/<id>/       capability.json (+ provision.mjs, routes.mjs, server.mjs) �
                      host = runs the process (port for life); mcp = path on the MCP domain + gateway
 site/build.mjs       renderer: var/registry.d + platform/*/capability.json → site/dist/{index.html, <id>/, index.json}
                      index.json is a PROJECTION — never leak assigned ports, dirs, env paths into it
-infra/Caddyfile      both hosts; imports var/routes/*.caddy
-infra/systemd/       labs-*.service = platform processes; project.service.tmpl = what guests get
+infra/Caddyfile.tmpl rendered by `labs render` to var/Caddyfile with {{root}} and the hosts from registry.json —
+                     nothing in git names a machine; /etc/caddy/Caddyfile imports var/Caddyfile once, by hand
+infra/systemd/       labs-*.service = platform processes; labs-sync.timer fires labs-sync.service nightly (a
+                     one-shot — the Makefile installs it but never enables it alone); project.service.tmpl = what guests get
 Makefile             the daily commands, and the only place systemd is driven — infra/deploy.sh calls it rather
                      than copying it, so a deploy from CI and a deploy by hand cannot drift
 infra/deploy.sh      the platform's own deploy: pull, then make install / sync / render
@@ -143,17 +145,34 @@ and Cursor users only; do not ship one thinking it covers everyone.
 
 ## Deploy
 
-Production runs as the Linux user `labs` in `/home/labs/labs`, never as the
-development user: `/home/abcdev` is `750`, so a compromised guest cannot read
-the company map's `.env`. After the one-time root steps (README, "Deploy"),
-everything is sudo-free: user units under lingering, `caddy reload` through the
-local admin API. `make`, `bin/labs` and `infra/deploy.sh` must stay runnable by
+Labs runs from wherever it is checked out; `var/Caddyfile` carries that path.
+Root is needed exactly twice per machine — `chmod o+x` on the parent directory so
+Caddy can traverse to `site/dist`, and the `import` line in `/etc/caddy/Caddyfile`
+(`make caddy` prints both). Everything else is sudo-free: user units under
+lingering, `caddy reload` through the local admin API.
+
+A dedicated `labs` user is the stronger arrangement — a guest project then runs
+outside the home directory of whoever owns the rest of the machine — but it is
+not required, and this deployment does not use one: guests run as the same user
+as everything else here. Keep that in mind before adding anything that reads
+`$HOME` or trusts a local path. `make`, `bin/labs` and `infra/deploy.sh` must stay runnable by
 that user with nothing but node, git and make — no npm install, ever: the CLI,
 the gateway and the site builder have no dependencies, and that is what makes a
 bare server one `git clone` away from serving.
 
 This machine has no GitHub push credential and no git identity configured. Commit
 locally when asked; the human pushes. Do not add credentials to fix that.
+
+## This checkout is live
+
+`labs.abclegacyllc.com` and `mcp.abclegacyllc.com` are served from **this**
+directory — `var/Caddyfile`, `site/dist`, `var/registry.d`, the running units.
+Anything that writes `var/` here changes the public site within seconds. So:
+`npm run check` is safe (it renders, but from the real registry); `sync`,
+`deploy` and `import` round-trips against scratch repositories are **not** — run
+them in a throwaway copy (`git clone . /tmp/…/labs-test && cd there`), never in
+this checkout. If a test did touch `var/registry.d` here, delete the entry it
+wrote and `make render` — the catalog is only as honest as that directory.
 
 ## Before finishing a change
 

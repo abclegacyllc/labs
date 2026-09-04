@@ -9,7 +9,8 @@
   "scripts": {
     "render": "bin/labs render --no-reload",
     "sync": "bin/labs sync",
-    "check": "node --check lib/registry.mjs && node --check bin/labs.mjs && node --check site/build.mjs && node --check platform/mcp/server.mjs && node --check platform/mcp/provision.mjs && node --check platform/mcp/routes.mjs && node --check platform/host/provision.mjs && node tools/check-docs.mjs && bin/labs export docs/examples/hello/abc-labs/labs.json && bin/labs export docs/examples/toolkit/abc-labs/labs.json && bin/labs export docs/examples/consumer/abc-labs/labs.json && bin/labs render --no-reload && caddy validate --adapter caddyfile --config infra/Caddyfile"
+    "check": "npm test && node --check lib/registry.mjs && node --check bin/labs.mjs && node --check site/build.mjs && node --check platform/mcp/server.mjs && node --check platform/mcp/provision.mjs && node --check platform/mcp/routes.mjs && node --check platform/host/provision.mjs && node tools/check-docs.mjs && bin/labs export docs/examples/hello/abc-labs/labs.json && bin/labs export docs/examples/toolkit/abc-labs/labs.json && bin/labs export docs/examples/consumer/abc-labs/labs.json && bin/labs render --no-reload && caddy validate --adapter caddyfile --config var/Caddyfile",
+    "test": "node --test test/registry.test.mjs"
   },
   "bin": {
     "labs": "bin/labs.mjs"

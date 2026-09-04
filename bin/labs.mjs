@@ -17,13 +17,13 @@
 // Runnable from the repository itself: npx github:abclegacyllc/labs import <id>
 import { spawnSync } from "node:child_process";
 import {
-  chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync,
+  chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import {
-  DIRS, LABS_DIR, LOCK_PATH, MANIFEST_PATH, ROOT, ensureDirs, hosted, kindOf, npxCommand, overdue, readAllowlist, readJSON, readPlatform,
-  readRealized, site, validateManifest, writeJSON, writeRealized,
+  DIRS, LABS_DIR, LOCK_PATH, MANIFEST_PATH, ROOT, VAR, ensureDirs, hosted, hostOf, kindOf, npxCommand, overdue, readAllowlist, readJSON,
+  readPlatform, readRealized, removeRealized, site, validateManifest, writeJSON, writeRealized,
 } from "../lib/registry.mjs";
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -91,15 +91,36 @@ function realize(p, ex, previous) {
 async function sync(only) {
   ensureDirs();
   const platform = readPlatform();
-  const prev = new Map(readRealized().map((e) => [e.id, e]));
+  const realized = readRealized();
+  const prev = new Map(realized.map((e) => [e.id, e]));
+  const allowlist = readAllowlist();
+  if (!only) {
+    const allowed = new Set(allowlist.projects.map((p) => p.id));
+    for (const old of realized) {
+      if (!allowed.has(old.id)) {
+        removeRealized(old.id);
+        log(`  remove ${old.id} — no longer in registry.json`);
+      }
+    }
+  }
   let ok = 0, skipped = 0;
   for (const p of readAllowlist().projects) {
     if (only && p.id !== only) continue;
     const r = await fetchManifest(p);
     if (r.error) { log(`  skip ${p.id} — no ${MANIFEST_PATH} yet (${r.error})`); skipped++; continue; }
     const errors = validateManifest(r.manifest, p.id, platform);
-    if (errors.length) { log(`  skip ${p.id} — invalid labs.json:\n    ${errors.join("\n    ")}`); skipped++; continue; }
-    if (!r.manifest.export) { log(`  skip ${p.id} — labs.json has no "export": it takes from Labs but is not a Labs project`); skipped++; continue; }
+    if (errors.length) {
+      removeRealized(p.id);
+      log(`  remove ${p.id} — invalid labs.json:\n    ${errors.join("\n    ")}`);
+      skipped++;
+      continue;
+    }
+    if (!r.manifest.export) {
+      removeRealized(p.id);
+      log(`  remove ${p.id} — labs.json has no "export": it takes from Labs but is not a Labs project`);
+      skipped++;
+      continue;
+    }
     const entry = realize(p, r.manifest.export, prev.get(p.id));
     // A project served elsewhere still needs its route: provision mcp on sync when it
     // names an upstream — deploy never runs for it, there is nothing to run here.
@@ -204,11 +225,20 @@ async function render() {
     writeFileSync(join(DIRS.routes, `${svc.id}.caddy`), routes(entries, st));
   }
   sh("node", [join(ROOT, "site", "build.mjs")]);
+
+  // The Caddyfile is rendered too: where this checkout sits and what the two
+  // hostnames are belong to this machine and to registry.json, not to a file in
+  // git that every deployment would have to edit.
+  const vars = { root: ROOT, labsHost: hostOf(st.labsUrl), mcpHost: hostOf(st.mcpUrl), gatewayPort: process.env.GATEWAY_PORT ?? "8800" };
+  const caddyfile = join(VAR, "Caddyfile");
+  writeFileSync(caddyfile, readFileSync(join(ROOT, "infra", "Caddyfile.tmpl"), "utf8")
+    .replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? fail(`Caddyfile.tmpl: unknown {{${k}}}`)));
+
   if (dry || noReload) return;
   // Reload only where Labs is actually wired into Caddy — never poke a Caddy that is serving something else.
   const main = "/etc/caddy/Caddyfile";
-  const wired = existsSync(main) && readFileSync(main, "utf8").includes(join(ROOT, "infra", "Caddyfile"));
-  if (!wired) { log(`caddy: not reloaded — ${main} does not import ${join(ROOT, "infra", "Caddyfile")} (see README, Deploy)`); return; }
+  const wired = existsSync(main) && readFileSync(main, "utf8").includes(caddyfile);
+  if (!wired) { log(`caddy: not reloaded — ${main} does not import ${caddyfile} (see README, Deploy)`); return; }
   const r = spawnSync("caddy", ["reload", "--config", main], { encoding: "utf8" });
   if (r.status === 0) log("caddy: reloaded");
   else log(`caddy: reload failed — ${(r.stderr || r.error?.message || "").trim().split("\n").pop()}`);
@@ -233,6 +263,22 @@ function exportCheck(path) {
   const errors = validateManifest(m, null, readPlatform());
   if (errors.length) { console.error(`${file}:\n${errors.map((e) => `  ${e}`).join("\n")}`); process.exit(1); }
   const parts = [];
+  // When run against the repository's own abc-labs/labs.json, show what
+  // `install.include` actually matches: a glob that catches files instead of
+  // their folders leaves nested resources behind, and no schema can see that —
+  // only a listing can.
+  const repoRoot = resolve(dirname(file), "..");
+  if (m.export?.install?.include && resolve(file) === join(repoRoot, MANIFEST_PATH)) {
+    const got = listIncluded(repoRoot, m.export.install.include);
+    if (!got.length) console.error(`  warning: install.include ${JSON.stringify(m.export.install.include)} matches NOTHING here — an import would fail`);
+    else {
+      const files = got.reduce((n, g) => n + g.files, 0);
+      log(`  install.include → ${got.length} entr${got.length === 1 ? "y" : "ies"}, ${files} file${files === 1 ? "" : "s"} travel with an import:`);
+      for (const g of got) log(`    ${g.path}${g.dir ? "/" : ""}${g.dir && g.files > 1 ? `  (${g.files} files)` : ""}`);
+      const fileOnly = got.filter((g) => !g.dir && readdirSync(join(repoRoot, dirname(g.path))).length > 1);
+      if (fileOnly.length) console.error(`  warning: ${fileOnly.length} match${fileOnly.length === 1 ? " is a file" : "es are files"} with siblings left behind (e.g. ${fileOnly[0].path}) — match the folder, so references/, tools/ and the like travel too`);
+    }
+  }
   if (m.export) parts.push(`exports "${m.export.id}" — ${m.export.kind ?? kindOf(m.export.category)}/${m.export.category}, met as ${Object.keys(m.export.surfaces ?? {}).join(", ")}${hosted(m.export) ? " (run here)" : ""}${m.export.uses ? `, rents ${Object.keys(m.export.uses).join(", ")}` : ""}${m.export.tags?.length ? `, tags ${m.export.tags.join(" ")}` : ""}`);
   if (m.import) parts.push(`imports ${Object.entries(m.import).map(([k, v]) => `${k}@${v}`).join(", ")}`);
   log(`${file}: valid — ${parts.join("; ")}`);
@@ -266,23 +312,32 @@ function globToRe(pattern) {
   const body = pattern.replace(/\/+$/, "").split("**").map((part) => part.split("*").map(esc).join("[^/]*")).join(".*");
   return new RegExp(`^${body}$`);
 }
-function copyIncluded(src, dest, patterns) {
+// Every entry the patterns match, relative to src. A matched directory stops the
+// walk — it travels whole, nested files included — so the result is the list of
+// top-level things an importer receives, each tagged with how many files it holds.
+function listIncluded(src, patterns) {
   const res = patterns.map(globToRe);
-  rmSync(dest, { recursive: true, force: true });
-  const copied = [];
+  const out = [];
+  const countFiles = (abs) => readdirSync(abs, { withFileTypes: true }).reduce((n, e) => n + (e.isDirectory() ? countFiles(join(abs, e.name)) : 1), 0);
   const walk = (rel) => {
     for (const ent of readdirSync(rel ? join(src, rel) : src, { withFileTypes: true })) {
-      if (ent.name === ".git") continue;
+      if (ent.name === ".git" || (rel === "" && ent.name === LABS_DIR)) continue;
       const r = rel ? `${rel}/${ent.name}` : ent.name;
-      if (res.some((re) => re.test(r))) {
-        mkdirSync(dirname(join(dest, r)), { recursive: true });
-        cpSync(join(src, r), join(dest, r), { recursive: true });
-        copied.push(r);
-      } else if (ent.isDirectory()) walk(r);
+      if (res.some((re) => re.test(r))) out.push({ path: r, dir: ent.isDirectory(), files: ent.isDirectory() ? countFiles(join(src, r)) : 1 });
+      else if (ent.isDirectory()) walk(r);
     }
   };
   walk("");
-  return copied;
+  return out;
+}
+function copyIncluded(src, dest, patterns) {
+  const matches = listIncluded(src, patterns);
+  rmSync(dest, { recursive: true, force: true });
+  for (const m of matches) {
+    mkdirSync(dirname(join(dest, m.path)), { recursive: true });
+    cpSync(join(src, m.path), join(dest, m.path), { recursive: true });
+  }
+  return matches.map((m) => m.path);
 }
 const lexists = (p) => { try { lstatSync(p); return true; } catch { return false; } };
 function applyLinks(link, dest) {
@@ -318,17 +373,39 @@ async function importProject(id, refArg, { quiet = false } = {}) {
   const ref = refArg ?? manifest.import?.[id] ?? "*";
   const before = lock.imports?.[id]?.commit;
   const { commit, tmp } = cloneAt(proj.repo, ref);
+  let staging;
   try {
     const dest = join(CWD, LABS_DIR, id);
-    const copied = copyIncluded(tmp, dest, proj.install.include);
-    if (!copied.length) fail(`"${id}": nothing in ${proj.repo}@${commit} matched ${JSON.stringify(proj.install.include)}`);
-    const links = applyLinks(proj.install.link ?? {}, dest);
+    mkdirSync(join(CWD, LABS_DIR), { recursive: true });
+    staging = mkdtempSync(join(CWD, LABS_DIR, `.${id}.staging-`));
+    const copied = copyIncluded(tmp, staging, proj.install.include);
+    if (!copied.length) {
+      rmSync(staging, { recursive: true, force: true });
+      staging = undefined;
+      rmSync(tmp, { recursive: true, force: true });
+      fail(`"${id}": nothing in ${proj.repo}@${commit} matched ${JSON.stringify(proj.install.include)}`);
+    }
+    // Publish only after copying and matching have succeeded. Existing files are
+    // kept until the new tree is ready, so a failed update cannot erase a good one.
+    const backup = `${dest}.backup-${process.pid}`;
+    if (lexists(dest)) renameSync(dest, backup);
+    try { renameSync(staging, dest); staging = undefined; }
+    catch (e) { if (lexists(backup)) renameSync(backup, dest); throw e; }
+    let links;
+    try { links = applyLinks(proj.install.link ?? {}, dest); }
+    catch (e) {
+      rmSync(dest, { recursive: true, force: true });
+      if (lexists(backup)) renameSync(backup, dest);
+      throw e;
+    }
+    if (lexists(backup)) rmSync(backup, { recursive: true, force: true });
     manifest.import = { ...(manifest.import ?? {}), [id]: ref };
     writeJSON(mPath, manifest);
     lock.imports = { ...(lock.imports ?? {}), [id]: { repo: proj.repo, ref, commit, installedAt: new Date().toISOString() } };
     writeJSON(lPath, lock);
     if (!quiet) log(`import: ${id}@${ref} → ${LABS_DIR}/${id}/ (${copied.length} entr${copied.length === 1 ? "y" : "ies"}${links ? `, ${links} link${links === 1 ? "" : "s"}` : ""}) pinned at ${commit}${before && before !== commit ? ` (was ${before})` : before ? " (unchanged)" : ""}`);
   } finally {
+    if (staging && lexists(staging)) rmSync(staging, { recursive: true, force: true });
     rmSync(tmp, { recursive: true, force: true });
   }
   return { before, commit };

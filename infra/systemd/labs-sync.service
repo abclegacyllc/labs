@@ -1,0 +1,18 @@
+[Unit]
+# One run of `labs sync`: re-read every allowlisted repository's abc-labs/labs.json
+# from GitHub, re-render the catalog, the pages, index.json and the routes, reload
+# Caddy. A project author edits their manifest and pushes; this is how the change
+# reaches the catalog without anyone touching the Labs server.
+#
+# Scheduled by labs-sync.timer — never enabled on its own. `make sync` runs the
+# same command by hand.
+Description=ABC Legacy Labs — re-read the listings
+Documentation=https://github.com/abclegacyllc/labs
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/labs
+ExecStart=/usr/bin/node --env-file-if-exists=.env bin/labs.mjs sync
+NoNewPrivileges=yes
