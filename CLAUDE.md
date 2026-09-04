@@ -68,7 +68,9 @@ lib/registry.mjs     paths, vocabulary (STATUSES, CATEGORIES, SURFACES, KINDS, M
 bin/labs.mjs         the CLI: platform verbs write var/; repository verbs (export/import/update) act on process.cwd()
                      and write only inside that repo's abc-labs/ (+ declared links). npx github:… runs it anywhere
 platform/<id>/       capability.json (+ provision.mjs, routes.mjs, server.mjs) — see platform/README.md
-                     host = runs the process (port for life); mcp = path on the MCP domain + gateway
+                     host = runs the process (port for life)
+                     mcp  = the WHOLE mcp. host: Caddy → gateway → project. Limits per project and per caller live
+                            there, and later OAuth; tiers come from registry.json, never from a project's manifest
 site/build.mjs       renderer: var/registry.d + platform/*/capability.json → site/dist/{index.html, <id>/, index.json}
                      index.json is a PROJECTION — never leak assigned ports, dirs, env paths into it
 infra/Caddyfile.tmpl rendered by `labs render` to var/Caddyfile with {{root}} and the hosts from registry.json —
@@ -129,6 +131,17 @@ or assigns the port — stable per id, from 8801 — so `mcp` can describe it) �
 other: a project that does not rent `host` is listed, not run, and needs only
 `sync` — which also routes `mcp` for a project that names an `upstream`. A
 project's other `uses` changes take effect on its next deploy, not on sync.
+
+## Limits
+
+`MCP_TIERS` in `lib/registry.mjs`, enforced in `platform/mcp/limits.mjs`, applied
+in the gateway. Two dimensions on purpose — per project protects the machine, per
+caller protects the project — plus a concurrency cap, which is the only one that
+catches a held-open SSE stream. The caller's identity is the **last**
+`X-Forwarded-For` hop (the one Caddy saw); taking the first would let anyone
+reset their own bucket. Tiers are set in `registry.json` because a manifest lives
+in a repository Labs does not control. When auth arrives, `clientOf` returns the
+token subject and IP becomes the fallback — one function, nothing else changes.
 
 ## Auth
 

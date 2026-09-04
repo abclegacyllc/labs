@@ -25,7 +25,7 @@ same tool can sit on both sides; the boundary is whose hand holds the token.
 | | What | Surface | Status |
 |---|---|---|---|
 | [`host`](host/) | runs the project's process: port for life, unit, restart, env, journal | `PORT`, `HOST`, `LABS_ID` | alpha |
-| [`mcp`](mcp/) | a path on the MCP domain, TLS, the index, 410 on retirement; OAuth at the gateway when a tool ever needs identity | `mcp.abclegacyllc.com/<id>` → `MCP_PATH`, `MCP_PUBLIC_URL` | alpha |
+| [`mcp`](mcp/) | a path on the MCP domain, TLS, the index, 410 on retirement, **rate limiting per project and per caller**; OAuth here too when a tool ever needs identity | `mcp.abclegacyllc.com/<id>` → `MCP_PATH`, `MCP_PUBLIC_URL` | alpha |
 | `web` | the project's *own* UI on its own origin | `<id>.labs.abclegacyllc.com` (wildcard DNS + Caddy on-demand TLS) | when a project asks |
 | `notify` | the project sends messages to its users or owner: channels `telegram`, `webhook`, `email` | `NOTIFY_API_URL` + `NOTIFY_TOKEN`, loopback HTTP | when a project asks |
 
@@ -53,6 +53,27 @@ platform/<id>/
   routes.mjs       optional — called by `labs render`; returns Caddy text for var/routes/<id>.caddy
   server.mjs       optional — the capability's own process, one user unit in infra/systemd/labs-<id>.service
 ```
+
+### Why the mcp gateway is in the traffic path
+
+Caddy hands the whole `mcp.` host to `platform/mcp/server.mjs`, which limits and
+then proxies to the project — it does not route projects itself. That is the only
+place a limit can be held *per project and per caller at once*, and later the only
+place that has to understand OAuth; a project implements neither. The cost is
+stated plainly: if the gateway is down, every MCP endpoint is down. It stays
+small, keeps no state worth losing, and systemd restarts it.
+
+What a project may consume is a **tier**, and a tier is set in `registry.json`,
+which is Labs's file — never in the project's manifest, which lives in a
+repository Labs does not control and could raise its own ceiling:
+
+```json
+{ "id": "svg", "repo": "https://github.com/…", "mcp": { "tier": "heavy" } }
+```
+
+`default` · `heavy` · `internal` are defined in `lib/registry.mjs` (`MCP_TIERS`)
+and described on the capability card. A project may ask for a tier in its README
+or an issue; only the allowlist grants one.
 
 `provision` receives `{ id, manifest, options, entry, all, site, dry }` and may
 allocate resources (a port, a path, a token, a database) — idempotently, because

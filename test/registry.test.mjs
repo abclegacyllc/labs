@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { normalizeHttpUrl, readPlatform, validateManifest } from "../lib/registry.mjs";
-import routes from "../platform/mcp/routes.mjs";
+import { clientOf, createLimiter } from "../platform/mcp/limits.mjs";
 
 const base = (surface = { app: { url: "https://example.com/app" } }) => ({
   labs: 1,
@@ -26,16 +26,8 @@ test("upstreams reject controls, invalid schemes, and private hosts", () => {
   assert.ok(validateManifest(withUpstream("https://127.0.0.1:2019"), null, readPlatform()).some((e) => e.includes("private or loopback")));
 });
 
-test("URLs are normalized before they reach generated Caddy config", () => {
-  // A loopback upstream would turn a public path into a door to Caddy's own admin API.
-  assert.throws(() => routes([{ id: "demo", status: "alpha", rented: { mcp: { path: "/demo", upstream: "https://127.0.0.1:2019" } } }]));
+test("URLs are normalized before they reach the gateway", () => {
   assert.equal(normalizeHttpUrl("https://example.com"), "https://example.com/");
-  const dirty = "https://example.com" + String.fromCharCode(10) + "#bad";
-  assert.throws(() => routes([{ id: "demo", status: "alpha", rented: { mcp: { path: "/demo", upstream: dirty } } }]));
-  const config = routes([{ id: "demo", status: "alpha", rented: { mcp: { path: "/demo", upstream: "https://example.com" } } }]);
-  // The origin, not the normalized URL: Caddy refuses an upstream with a path, and "/" is one.
-  assert.ok(config.includes("reverse_proxy https://example.com {"));
-  assert.ok(!config.includes("https://example.com/"));
 });
 
 test("failed import preserves the existing vendored tree", () => {
@@ -57,4 +49,58 @@ test("failed import preserves the existing vendored tree", () => {
     assert.equal(readFileSync(join(dest, "old.txt"), "utf8"), "old\\n");
     assert.deepEqual(readdirSync(join(root, "abc-labs")).filter((name) => name.includes("staging")), []);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("the caller identity is the hop Caddy saw, not the one the caller sent", () => {
+  const req = (xff, remote = "10.0.0.9") => ({ headers: xff === undefined ? {} : { "x-forwarded-for": xff }, socket: { remoteAddress: remote } });
+  // Caddy appends; a client that forges a header only adds an entry in front of its own.
+  assert.equal(clientOf(req("1.2.3.4, 203.0.113.7")), "203.0.113.7");
+  assert.equal(clientOf(req("203.0.113.7")), "203.0.113.7");
+  assert.equal(clientOf(req(undefined)), "10.0.0.9");
+});
+
+test("limits hold per caller and per project, and refill over time", () => {
+  let now = 0;
+  const limiter = createLimiter({ now: () => now });
+  const entry = { id: "demo", tier: "default" }; // 60/min per caller, burst 20
+
+  const seats = [];
+  for (let i = 0; i < 20; i++) {
+    const s = limiter.admit(entry, "a");
+    assert.ok(s.ok, `request ${i} should pass`);
+    s.release(); // release concurrency so only the rate is under test
+    seats.push(s);
+  }
+  const denied = limiter.admit(entry, "a");
+  assert.equal(denied.ok, false);
+  assert.equal(denied.scope, "client");
+  assert.ok(denied.retryAfter >= 1);
+
+  // A different caller is unaffected: the buckets are per identity.
+  assert.ok(limiter.admit(entry, "b").ok);
+
+  // One minute later the caller's bucket is full again.
+  now += 60_000;
+  assert.ok(limiter.admit(entry, "a").ok);
+  limiter.stop();
+});
+
+test("concurrency is bounded per caller, and released seats come back", () => {
+  const limiter = createLimiter({ now: () => 0 });
+  const entry = { id: "demo", tier: "default" }; // 4 concurrent per caller
+  const held = [];
+  for (let i = 0; i < 4; i++) { const s = limiter.admit(entry, "a"); assert.ok(s.ok); held.push(s); }
+  const blocked = limiter.admit(entry, "a");
+  assert.equal(blocked.ok, false);
+  assert.equal(blocked.reason, "too many requests in flight");
+  held.pop().release();
+  assert.ok(limiter.admit(entry, "a").ok, "a released seat is usable again");
+  limiter.stop();
+});
+
+test("an internal tier is not limited at all", () => {
+  const limiter = createLimiter({ now: () => 0 });
+  const entry = { id: "labs", tier: "internal" };
+  for (let i = 0; i < 500; i++) assert.ok(limiter.admit(entry, "a").ok);
+  limiter.stop();
 });

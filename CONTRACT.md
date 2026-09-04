@@ -199,9 +199,17 @@ Labs under a dedicated Linux user or a rootless container. Logs: `journalctl --u
 | `MCP_PUBLIC_URL` | `https://mcp.abclegacyllc.com/<id>` — what users paste into Claude |
 
 Labs adds the route, TLS, the entry in the public index (once your status is
-callable), and `410 Gone` pointing at your page after you archive. Rate limiting
-and — if a tool ever needs to know who is asking — OAuth happen at the gateway;
-you never implement either.
+callable), and `410 Gone` pointing at your page after you archive.
+
+**Rate limiting happens at the gateway; you implement none of it.** Every request
+to your path passes through it and is counted twice: once against *you* (so one
+tenant cannot take the machine) and once against *the caller* (so one caller
+cannot take you). Over either limit the caller gets `429` with `Retry-After`, and
+your process never sees the request. Your tier — how much you may consume — is
+set by Labs in its allowlist, not by this file; ask for a bigger one in an issue
+and say what you expect. Your process receives the real caller in
+`X-Forwarded-For`, which the gateway sets and a caller cannot forge. If a tool
+ever needs to know *who* is asking, OAuth lands in the same place.
 
 **The promise (rule 2):** `/<id>` is written into other people's configs. Once
 `alpha`, it is never renamed or reused. A breaking change is a new id (`hello2`)

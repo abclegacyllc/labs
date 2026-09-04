@@ -22,8 +22,8 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import {
-  DIRS, LABS_DIR, LOCK_PATH, MANIFEST_PATH, ROOT, VAR, ensureDirs, hosted, hostOf, kindOf, npxCommand, overdue, readAllowlist, readJSON,
-  readPlatform, readRealized, removeRealized, site, validateManifest, writeJSON, writeRealized,
+  DEFAULT_TIER, DIRS, LABS_DIR, LOCK_PATH, MANIFEST_PATH, MCP_TIERS, ROOT, VAR, ensureDirs, hosted, hostOf, kindOf, npxCommand, overdue,
+  readAllowlist, readJSON, readPlatform, readRealized, removeRealized, site, validateManifest, writeJSON, writeRealized,
 } from "../lib/registry.mjs";
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -50,7 +50,15 @@ function sh(bin, argv, opts = {}) {
 function allowlisted(id) {
   const p = readAllowlist().projects.find((p) => p.id === id);
   if (!p) fail(`"${id}" is not in registry.json — Labs decides who is in; add it there first`);
+  checkTier(p);
   return p;
+}
+// What a project may consume lives in Labs's own file, because a manifest lives
+// in a repository Labs does not control. A typo here must not silently pass.
+function checkTier(p) {
+  if (p.mcp?.tier !== undefined && !MCP_TIERS[p.mcp.tier]) {
+    fail(`registry.json: "${p.id}" asks for mcp tier "${p.mcp.tier}" — Labs offers: ${Object.keys(MCP_TIERS).join(", ")}`);
+  }
 }
 
 function rawManifestUrl(repo) {
@@ -80,6 +88,7 @@ function realize(p, ex, previous) {
     ...ex,
     id: p.id,
     repo: p.repo,
+    tier: p.mcp?.tier ?? DEFAULT_TIER,
     assigned: previous?.assigned ?? {},
     rented: previous?.rented ?? {},
     commit: previous?.commit,
@@ -106,6 +115,7 @@ async function sync(only) {
   let ok = 0, skipped = 0;
   for (const p of readAllowlist().projects) {
     if (only && p.id !== only) continue;
+    checkTier(p);
     const r = await fetchManifest(p);
     if (r.error) { log(`  skip ${p.id} — no ${MANIFEST_PATH} yet (${r.error})`); skipped++; continue; }
     const errors = validateManifest(r.manifest, p.id, platform);
@@ -218,12 +228,17 @@ async function render() {
   ensureDirs();
   const entries = readRealized();
   const st = site();
+  // A capability that no longer generates routes must not leave its last file
+  // behind — Caddy would keep importing it, and it would keep being wrong.
+  const wants = new Set();
   for (const svc of readPlatform()) {
     const mod = join(svc.dir, "routes.mjs");
     if (!existsSync(mod)) continue;
     const { default: routes } = await import(mod);
     writeFileSync(join(DIRS.routes, `${svc.id}.caddy`), routes(entries, st));
+    wants.add(`${svc.id}.caddy`);
   }
+  for (const f of readdirSync(DIRS.routes)) if (f.endsWith(".caddy") && !wants.has(f)) rmSync(join(DIRS.routes, f));
   sh("node", [join(ROOT, "site", "build.mjs")]);
 
   // The Caddyfile is rendered too: where this checkout sits and what the two

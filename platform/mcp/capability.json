@@ -1,11 +1,22 @@
 {
   "id": "mcp",
   "name": "MCP hosting",
-  "summary": "A path on mcp.abclegacyllc.com for a project's MCP server: TLS, routing, the public index, 410 on retirement — and, when a tool ever needs identity, OAuth at the gateway so the project never implements it.",
+  "summary": "A path on mcp.abclegacyllc.com for a project's MCP server: TLS, routing, the public index, 410 on retirement, and rate limiting in two dimensions — per project and per caller — so one tenant cannot take the machine and one caller cannot take a tenant. When a tool ever needs identity, OAuth lands here too; the project implements neither.",
   "status": "alpha",
   "public": "https://mcp.abclegacyllc.com",
-  "provides": ["MCP_PATH", "MCP_PUBLIC_URL"],
+  "provides": [
+    "MCP_PATH",
+    "MCP_PUBLIC_URL"
+  ],
   "options": {
     "upstream": "optional — https://host:port when the server runs somewhere other than this machine (a graduated project keeps its endpoint this way)"
+  },
+  "limits": {
+    "setBy": "Labs, in registry.json: { \"id\": \"…\", \"repo\": \"…\", \"mcp\": { \"tier\": \"default | heavy | internal\" } }. A project may ask in its manifest; it cannot grant itself a tier.",
+    "tiers": {
+      "default": "60 requests/min per caller, 600 per project; 4 and 20 concurrent",
+      "heavy": "120 requests/min per caller, 3000 per project; 8 and 60 concurrent",
+      "internal": "no limit — for Labs's own services"
+    }
   }
 }
