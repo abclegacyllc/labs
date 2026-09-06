@@ -93,9 +93,10 @@ registry.json          who is in: site metadata + the allowlist of project repos
 JOIN.md                for whoever prepares a repository (human or agent): template, decisions, validate, hand back
 docs/direction.md      the three surfaces, what is deliberately not built, and the trigger that would change that
 CONTRACT.md            the repository ↔ Labs contract: abc-labs/labs.json, the three axes, export, import, env
-platform/<id>/         a capability: capability.json, provision.mjs, routes.mjs, server.mjs
+platform/<id>/         a capability: capability.json, provision.mjs, routes.mjs, server.mjs — host, mcp, web
 bin/labs               the CLI: sync · deploy · render · list (platform) — export · import · update (any repo)
 lib/registry.mjs       paths, vocabulary, manifest validation — shared by everything
+lib/markdown.mjs       the safe Markdown subset a project's README and CHANGELOG are rendered through
 site/                  the catalog renderer (zero dependencies)
 infra/                 Caddyfile.tmpl (rendered to var/Caddyfile), platform units + the nightly sync timer, project unit template, deploy.sh
 tools/                 requirements.sh (what a machine needs), check-docs.mjs (drift + format)
@@ -112,6 +113,7 @@ var/projects/<id>/            everything Labs holds about one project — delete
   realized.json                 the listing: its manifest plus what Labs assigned (port, origin, tier, when)
   repo/                         its checkout, if hosted or serving files
   env                           what its process receives, 0600
+  cache/                        its abc-labs/ README, CHANGELOG and icon, refreshed every sync, served from here
   labs-project-<id>.service     its unit, symlinked into systemd's directory
 var/routes/*.caddy            generated from all projects — the one thing that spans them
 ```

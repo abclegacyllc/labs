@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploys the PLATFORM — Labs itself. Runs on the server as the labs user:
+# Deploys the PLATFORM — Labs itself. Runs on the server, as the user Labs runs as:
 #
 #     cd ~/labs && ./infra/deploy.sh
 #

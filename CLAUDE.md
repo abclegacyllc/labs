@@ -65,13 +65,17 @@ JOIN.md              what an agent in a guest repo reads to produce abc-labs/lab
                      every option inline, decision tables, validate, hand-back. Written so no question comes back
 CONTRACT.md          the reference behind JOIN.md — keep both true before anything else
 tools/check-docs.mjs drift check: every category, surface, status in lib must be named in JOIN.md and CONTRACT.md
-lib/registry.mjs     paths, vocabulary (STATUSES, CATEGORIES, SURFACES, KINDS, MANIFEST_PATH), validateManifest
+lib/registry.mjs     paths, vocabulary (STATUSES, CATEGORIES, SURFACES, KINDS, MANIFEST_PATH, LABS_FILES), validateManifest
+lib/markdown.mjs     the SAFE Markdown subset a project's abc-labs/README.md and CHANGELOG.md are rendered through — no raw
+                     HTML, no images, http(s) links only; `latestSection` picks the newest release out of a changelog
 bin/labs.mjs         the CLI: platform verbs write var/; repository verbs (export/import/update) act on process.cwd()
                      and write only inside that repo's abc-labs/ (+ declared links). npx github:… runs it anywhere
 platform/<id>/       capability.json (+ provision.mjs, routes.mjs, server.mjs) — see platform/README.md
                      host = runs the process (port for life)
                      mcp  = the WHOLE mcp. host: Caddy → gateway → project. Limits per project and per caller live
                             there, and later OAuth; tiers come from registry.json, never from a project's manifest
+                     web  = <id>.labs.abclegacyllc.com, an origin per project: `dist` served by Caddy (no process), or
+                            proxied to the host process; site blocks generated into var/routes/web.caddy
 site/build.mjs       renderer: var/projects/*/realized.json + platform/*/capability.json → site/dist/{index.html, <id>/, index.json}
                      index.json is a PROJECTION — never leak assigned ports, dirs, env paths into it
 infra/Caddyfile.tmpl rendered by `labs render` to var/Caddyfile with {{root}} and the hosts from registry.json —
@@ -86,7 +90,8 @@ docs/examples/       the three shapes of labs.json (hello / toolkit / consumer) 
 docs/direction.md    catalog vs console vs community — read before adding a framework, a login or a database
 var/                 gitignored realized state; never commit, never hand-edit. PROJECT-CENTRED: everything Labs
                      holds about a project is var/projects/<id>/ — realized.json (the listing), repo/ (checkout),
-                     env, the unit file (symlinked into systemd's dir), later cached icon/readme. `labs remove <id>`
+                     env, the unit file (symlinked into systemd's dir), cache/ (its abc-labs/ README, CHANGELOG and
+                     icon, fetched on every sync and served from here, never hotlinked). `labs remove <id>`
                      deletes that one folder and nothing is left behind. Only aggregates (var/routes, var/Caddyfile)
                      live outside it
 ```

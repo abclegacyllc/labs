@@ -7,9 +7,15 @@ needs at least one:
 
 | | `export` — gives to Labs | `import` — takes from Labs |
 |---|---|---|
-| [`hello/`](hello/abc-labs/labs.json) — an **api** met over **mcp**, hosted here, also using the toolkit | rents `host` + `mcp` | `toolkit` |
+| [`hello/`](hello/abc-labs/labs.json) — an **api** met over **mcp**, hosted here, also using the toolkit; ships the whole folder: [README.md](hello/abc-labs/README.md), [CHANGELOG.md](hello/abc-labs/CHANGELOG.md), [icon.svg](hello/abc-labs/icon.svg), `version`, `requires` | rents `host` + `mcp` | `toolkit` |
 | [`toolkit/`](toolkit/abc-labs/labs.json) — **knowledge** met through an **ai** that reads Agent Skills, imported by other repos | `install` spec, nothing hosted | — |
 | [`consumer/`](consumer/abc-labs/labs.json) — any repository, ABC's or not | — | `toolkit` |
+
+`hello/` is also the example of everything else `abc-labs/` can hold. Labs reads
+these by **fixed name and nothing else in the repository**: `README.md` becomes the
+project page's *About*, `CHANGELOG.md`'s newest section its *What's new*,
+`icon.svg` (or `icon.png`, ≤ 64 KB) the card's icon, and `version` and
+`requires` in `labs.json` the version badge and the *Needs* line. All optional.
 
 Every export answers three questions — `kind` + `category` (*what sort of thing is
 it, and what does the taking project get?* both written, and they must agree),

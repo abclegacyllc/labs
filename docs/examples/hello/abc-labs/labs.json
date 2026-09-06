@@ -6,13 +6,24 @@
     "tagline": "One sentence a stranger understands — what the project does, not what it is built with.",
     "kind": "service",
     "category": "api",
-    "surfaces": { "mcp": {} },
-    "tags": ["example"],
+    "surfaces": {
+      "mcp": {}
+    },
+    "tags": [
+      "example"
+    ],
     "license": "MIT",
+    "version": "0.1.0",
+    "requires": [
+      "Claude Code or Claude.ai"
+    ],
     "status": "building",
     "started": "2026-09-01",
     "uses": {
-      "host": { "install": "npm ci --omit=dev", "start": "node server.mjs" },
+      "host": {
+        "install": "npm ci --omit=dev",
+        "start": "node server.mjs"
+      },
       "mcp": {}
     },
     "links": {

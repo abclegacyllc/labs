@@ -23,7 +23,7 @@ at a glance — *this is the Labs integration; the rest is the project*:
                                       "import" — what it takes from Labs
     README.md        optional — rendered on your project page as "About"
     CHANGELOG.md     optional — its newest section is shown as "What's new"
-    icon.svg|png     optional — your icon, ≤ 64 KB, served as an <img>
+    icon.svg         optional — your icon, ≤ 64 KB, served as an <img> (icon.png works too)
     labs.lock.json   written by the CLI: the exact commit behind every import
     <id>/            files of each imported project
   src/ …             the project itself

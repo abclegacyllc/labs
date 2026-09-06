@@ -12,7 +12,7 @@
 //    examples excepted — they are templates, not data).
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { AI_FORMATS, CATEGORIES, KINDS, ROOT, STATUSES, SURFACES } from "../lib/registry.mjs";
+import { AI_FORMATS, CATEGORIES, KINDS, LABS_FILES, ROOT, STATUSES, SURFACES } from "../lib/registry.mjs";
 
 const problems = [];
 const note = (file, line, msg) => problems.push(`${relative(ROOT, file)}${line ? `:${line}` : ""} — ${msg}`);
@@ -34,6 +34,8 @@ for (const doc of ["JOIN.md", "CONTRACT.md"]) {
   for (const [what, words] of [["kind", Object.keys(KINDS)], ["category", Object.keys(CATEGORIES)], ["surface", Object.keys(SURFACES)], ["ai format", Object.keys(AI_FORMATS)], ["status", STATUSES]]) {
     for (const w of words) if (!new RegExp(`\\b${w}\\b`).test(text)) note(join(ROOT, doc), 0, `${what} "${w}" is never mentioned`);
   }
+  // The fixed file names Labs reads from abc-labs/ — an author must be able to find them.
+  for (const f of [LABS_FILES.readme, LABS_FILES.changelog, ...LABS_FILES.icons]) if (!text.includes(f)) note(join(ROOT, doc), 0, `abc-labs file "${f}" is never mentioned`);
 }
 
 // ── 2. form ─────────────────────────────────────────────────────────────────
@@ -112,4 +114,4 @@ if (problems.length) {
   console.error(problems.map((p) => `  ${p}`).join("\n"));
   process.exit(1);
 }
-console.log("docs: every kind, category, surface, ai format and status named; tables, links and json well formed");
+console.log("docs: every kind, category, surface, ai format, status and abc-labs file named; tables, links and json well formed");
