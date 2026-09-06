@@ -164,7 +164,10 @@ async function deploy(id) {
   if (errors.length) fail(`${id}: invalid labs.json:\n  ${errors.join("\n  ")}`);
   const ex = manifest.export;
   if (!ex) fail(`${id}: labs.json has no "export" — nothing to deploy`);
-  if (!hosted(ex)) fail(`${id}: does not rent "host" — this project is listed, not run here; \`labs sync\` is all it needs`);
+  // Two reasons to have a checkout on this machine: a process to run, or files
+  // to serve. A project with neither is listed, not deployed.
+  const runs = hosted(ex);
+  if (!runs && !ex.uses?.web?.dist) fail(`${id}: rents neither "host" nor "web" with a "dist" — this project is listed, not run here; \`labs sync\` is all it needs`);
 
   const all = readRealized();
   const entry = realize(p, ex, all.find((e) => e.id === id));
@@ -187,10 +190,18 @@ async function deploy(id) {
     log(`  ${svcId}: ${out.summary ?? "provisioned"}`);
   }
 
-  const { install, start } = ex.uses.host;
+  const { install, start } = ex.uses.host ?? {};
   if (install) {
     log(`install: ${install}`);
     if (!dry) sh("sh", ["-c", install], { cwd: dir });
+  }
+
+  if (!runs) {
+    // Nothing to start: Caddy serves the files straight from the checkout.
+    entry.deployedAt = new Date().toISOString();
+    writeRealized(entry);
+    log(`deploy: ${id} @ ${commit} — static, no process${dry ? " (dry-run)" : ""}`);
+    return render();
   }
 
   // The env file is written by Labs, KEY=value only, so systemd's EnvironmentFile

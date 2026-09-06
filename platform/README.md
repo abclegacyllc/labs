@@ -26,7 +26,7 @@ same tool can sit on both sides; the boundary is whose hand holds the token.
 |---|---|---|---|
 | [`host`](host/) | runs the project's process: port for life, unit, restart, env, journal | `PORT`, `HOST`, `LABS_ID` | alpha |
 | [`mcp`](mcp/) | a path on the MCP domain, TLS, the index, 410 on retirement, **rate limiting per project and per caller**; OAuth here too when a tool ever needs identity | `mcp.abclegacyllc.com/<id>` → `MCP_PATH`, `MCP_PUBLIC_URL` | alpha |
-| `web` | the project's *own* UI on its own origin | `<id>.labs.abclegacyllc.com` (wildcard DNS + Caddy on-demand TLS) | when a project asks |
+| [`web`](web/) | the project's own live app, on an origin of its own — anyone can try the experiment in a browser | `<id>.labs.abclegacyllc.com` → `WEB_PUBLIC_URL` | alpha |
 | `notify` | the project sends messages to its users or owner: channels `telegram`, `webhook`, `email` | `NOTIFY_API_URL` + `NOTIFY_TOKEN`, loopback HTTP | when a project asks |
 
 Not capabilities, on purpose: **the project page** (`labs.abclegacyllc.com/<id>`)
@@ -39,7 +39,23 @@ with Labs endpoints as targets, nothing to build. **Email is a channel of
 Two decisions baked in: **URLs carry the id, never the display name** (rule 2),
 and **project-served HTML never lives under `labs.abclegacyllc.com/…`** — one
 origin would let one project's script read every other's storage, which is why
-`*.vercel.app` and `*.github.io` exist.
+`*.vercel.app` and `*.github.io` exist, and why `web` hands out a subdomain.
+
+### How `web` serves an app
+
+Two shapes, and the first is the one to prefer:
+
+| | |
+|---|---|
+| `"web": { "dist": "dist" }` | Caddy serves the built files straight from the checkout. No process, no port, nothing to keep alive — and a React/Vite/Tailwind build is exactly this. `spa` (default true) serves `index.html` for unknown paths so a client-routed app survives a refresh. |
+| `"web": {}` with `host` | the origin is proxied to the project's own process, for an app with a backend. **Not rate limited yet** — unlike `mcp`, whose gateway counts every request. Prefer `dist` until that is built. |
+
+The project builds `dist/` in its **own** CI and commits it; the Labs server never
+runs npm on a guest's behalf. One wildcard record — `*.labs` → the server — covers
+every future id, and Caddy takes a certificate per subdomain by itself (proved:
+a fresh subdomain went from nothing to a valid Let''s Encrypt certificate in nine
+seconds). A project''s stack is its own business: Labs serves files and proxies
+ports, and has no opinion about the framework that produced them.
 
 A project rents a capability with one entry in its `abc-labs/labs.json`:
 `"uses": { "host": { "start": "node server.mjs" }, "mcp": {} }`.

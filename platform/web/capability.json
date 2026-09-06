@@ -1,0 +1,17 @@
+{
+  "id": "web",
+  "name": "Live app",
+  "summary": "An origin of the project's own — https://<id>.labs.abclegacyllc.com — so anyone can try the experiment in a browser without installing anything. A separate origin, not a path on the catalog, so one project's page can never read another's cookies or storage.",
+  "status": "alpha",
+  "public": "https://<id>.labs.abclegacyllc.com",
+  "provides": ["WEB_PUBLIC_URL"],
+  "options": {
+    "dist": "optional — a directory of built files in your repository, e.g. \"dist\". Caddy serves it directly: no process, no port, nothing to keep alive. Build it in your own CI and commit it; the Labs server never runs npm for you.",
+    "spa": "optional, default true when \"dist\" is set — serve index.html for unknown paths, which is what a client-routed app (React, Vue, Svelte) needs to survive a refresh. Set false for a plain multi-page site so a missing file is a real 404.",
+    "note": "with no \"dist\", the origin is proxied to the process you run under the host capability, and your app serves itself at /"
+  },
+  "limits": {
+    "static": "served by Caddy — the same machinery as the catalog itself",
+    "proxied": "not rate limited yet, unlike the mcp capability. Prefer \"dist\" until that is built."
+  }
+}

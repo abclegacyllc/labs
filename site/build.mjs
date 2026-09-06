@@ -46,7 +46,12 @@ function affordance(p, name, def) {
     case "cli":
     case "package": return { kind: "cmd", label, cmd: def.command, note: def.registry ? `From ${esc(def.registry)}.` : "" };
     case "extension": return { kind: "link", label: `${label}${def.host ? ` for ${def.host}` : ""}`, href: def.url };
-    case "app": return { kind: "link", label: def.platform && def.platform !== "web" ? `${label} (${def.platform})` : label, href: def.url };
+    // A project renting `web` writes no URL: Labs assigns the origin, so the
+    // card and the page take it from what was actually provisioned.
+    case "app": {
+      const href = def.url ?? p.rented?.web?.origin;
+      return href ? { kind: "link", label: def.platform && def.platform !== "web" ? `${label} (${def.platform})` : label, href } : null;
+    }
     default: return def.url ? { kind: "link", label, href: def.url } : null;
   }
 }
@@ -109,6 +114,7 @@ function projectPage(p) {
     ["What it is", `${esc(CATEGORIES[p.category]?.one ?? p.category)} — ${esc(CATEGORIES[p.category]?.test ?? "")}`],
     p.tags?.length ? ["Tags", `<div class="tags">${p.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>`] : null,
     ["Started", `<time datetime="${esc(p.started)}">${esc(p.started)}</time>${p.status === "building" ? ` — due <time datetime="${esc(alphaBy(p.started))}">${esc(alphaBy(p.started))}</time>` : ""}`],
+    p.rented?.web ? ["Live at", `<a href="${esc(p.rented.web.origin)}">${esc(p.rented.web.origin.replace(/^https:\/\//, ""))}</a>`] : null,
     p.rented?.mcp ? ["Endpoint", `<code>${esc(p.rented.mcp.endpoint)}</code>`] : null,
     p.rented?.mcp && !tierOf(p).unlimited ? ["Rate limit", `${tierOf(p).client.rpm}/min per caller, ${tierOf(p).concurrent.client} at once`] : null,
     Object.keys(p.rented ?? {}).length ? ["Runs on", Object.keys(p.rented).map((r) => `<a href="/#platform-${esc(r)}">${esc(r)}</a>`).join(", ")] : null,

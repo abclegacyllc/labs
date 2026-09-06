@@ -218,6 +218,31 @@ with the old one kept alive for a deprecation window. Running somewhere else?
 — also how a graduated project keeps its endpoint. The upstream must be an
 external HTTPS host; loopback/private addresses and control characters are rejected.
 
+### Renting `web` — a live app on an origin of your own
+
+```json
+"uses": { "web": { "dist": "dist" } },
+"surfaces": { "app": {} }
+```
+
+You get `https://<id>.labs.abclegacyllc.com` — your own origin, so anyone can try
+the experiment in a browser with nothing to install, and your page can never read
+another project's cookies or storage. The `app` surface needs no `url`: Labs
+assigns the origin and fills it in, and your card grows an **Open** button.
+
+| Env | |
+|---|---|
+| `WEB_PUBLIC_URL` | your origin, if your process needs to know it |
+
+`dist` is a directory of built files **in your repository** — build it in your own
+CI and commit the result; the Labs server never runs npm for you. React, Vue,
+Svelte, plain HTML: Labs serves files and has no opinion about what produced
+them. Unknown paths fall back to `index.html` so a client-routed app survives a
+refresh; set `"spa": false` for a plain multi-page site.
+
+With no `dist`, the origin is proxied to the process you run under `host` — for
+an app with a backend. That shape is not rate limited yet, so prefer `dist`.
+
 ### `install` — letting other repositories take you
 
 ```json

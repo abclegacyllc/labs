@@ -172,12 +172,14 @@ A repository that already ships to real users is `beta`, not `building`.
 | rent | when | you receive |
 |---|---|---|
 | `host` | Labs should **run your process** on its server | `PORT`, `HOST` (`127.0.0.1`), `LABS_ID`, `NODE_ENV` — listen on `$HOST:$PORT` |
+| `web` | people should be able to **try it in a browser** | `WEB_PUBLIC_URL` — your own origin, `https://<id>.labs.abclegacyllc.com`. Add `"dist": "<built directory committed in your repo>"` and Labs serves it with no process at all; also list an `app` surface (its `url` is filled in by Labs) |
 | `mcp` | you have an `mcp` surface | `MCP_PATH` (`/<id>` — serve the MCP endpoint **at this path**), `MCP_PUBLIC_URL` |
 
 ```json
 "uses": {
   "host": { "install": "<optional: e.g. npm ci --omit=dev>", "start": "<required: e.g. node server.mjs>" },
-  "mcp": {}
+  "mcp": {},
+  "web": { "dist": "<optional: built directory, e.g. dist>", "spa": "<optional boolean, default true>" }
 }
 ```
 
