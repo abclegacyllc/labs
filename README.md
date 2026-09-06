@@ -89,6 +89,7 @@ one at all: [platform/](platform/README.md).
 Makefile               start · stop · status · logs · sync · deploy · requirements — the daily commands
 registry.json          who is in: site metadata + the allowlist of project repos
 JOIN.md                for whoever prepares a repository (human or agent): template, decisions, validate, hand back
+docs/direction.md      the three surfaces, what is deliberately not built, and the trigger that would change that
 CONTRACT.md            the repository ↔ Labs contract: abc-labs/labs.json, the three axes, export, import, env
 platform/<id>/         a capability: capability.json, provision.mjs, routes.mjs, server.mjs
 bin/labs               the CLI: sync · deploy · render · list (platform) — export · import · update (any repo)

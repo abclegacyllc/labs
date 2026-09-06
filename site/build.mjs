@@ -72,7 +72,7 @@ function projectCard(p) {
   const cmd = acts.find((a) => a.kind === "cmd");
   const late = overdue(p);
   return `
-      <article class="card" id="${esc(p.id)}">
+      <article class="card" id="${esc(p.id)}" data-kind="${esc(kindOfEntry(p))}" data-category="${esc(p.category)}" data-tags="${esc((p.tags ?? []).join(" "))}" data-text="${esc([p.name, p.tagline, p.id, CATEGORIES[p.category]?.one, ...(p.tags ?? [])].join(" ").toLowerCase())}">
         <div class="card-top">
           <div>
             <h3><a href="/${esc(p.id)}/">${esc(p.name)}</a></h3>
@@ -128,6 +128,7 @@ function projectPage(p) {
     .map((s) => whereBlock(p, s, p.surfaces[s])).join("\n        ");
 
   return shell({
+    here: "projects",
     title: `${p.name} — ${site.name}`,
     description: p.tagline,
     body: `
@@ -161,7 +162,20 @@ function capabilityCard(c) {
       </article>`;
 }
 
-function shell({ title, description, body }) {
+const topbar = (here = "") => `
+    <div class="topbar">
+      <nav class="wrap">
+        <a class="wordmark" href="/"><span>${esc(site.company)}</span> Labs</a>
+        <span class="topbar-links">
+          <a href="/#projects"${here === "projects" ? ' aria-current="page"' : ""}>Projects</a>
+          <a href="/#platform"${here === "platform" ? ' aria-current="page"' : ""}>Platform</a>
+          <a href="${esc(site.repo)}/blob/main/JOIN.md">Bring a project</a>
+          <a href="${esc(site.repo)}">Source</a>
+        </span>
+      </nav>
+    </div>`;
+
+function shell({ title, description, body, here }) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -176,8 +190,9 @@ function shell({ title, description, body }) {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/style.css">
+<script>document.documentElement.className = "js";</script>
 </head>
-<body>${body}
+<body>${topbar(here)}${body}
 <footer class="colophon wrap">
   <p>© ${new Date().getUTCFullYear()} <a href="${esc(site.companyUrl)}">${esc(site.company)}</a> · <a href="${esc(site.repo)}">Source</a> · <a href="${esc(site.feedback)}">Feedback</a></p>
   <p>Everything here is an experiment. Read the status before you depend on it.</p>
@@ -194,6 +209,71 @@ document.addEventListener("click", (e) => {
     setTimeout(() => { b.textContent = was; delete b.dataset.copied; }, 1400);
   });
 });
+
+// Filtering. It lives in the URL, so a filtered view can be linked and the back
+// button undoes a click. Nothing is fetched and nothing is rendered: the cards
+// are already on the page and this only hides them.
+(() => {
+  const q = document.getElementById("q");
+  if (!q) return;
+  const chips = document.getElementById("chips");
+  const count = document.getElementById("count");
+  const noMatch = document.getElementById("no-match");
+  const cards = [...document.querySelectorAll(".card[data-kind]")];
+  const sections = [...document.querySelectorAll(".section[id]")].filter((s) => s.querySelector(".card[data-kind]"));
+  let state = { text: "", kind: "", tag: "" };
+
+  const apply = (push) => {
+    const text = state.text.trim().toLowerCase();
+    let shown = 0;
+    for (const c of cards) {
+      const ok = (!text || c.dataset.text.includes(text))
+        && (!state.kind || c.dataset.kind === state.kind)
+        && (!state.tag || c.dataset.tags.split(" ").includes(state.tag));
+      c.hidden = !ok;
+      if (ok) shown++;
+    }
+    for (const s of sections) s.hidden = !s.querySelector(".card[data-kind]:not([hidden])");
+    const filtered = text || state.kind || state.tag;
+    count.textContent = filtered ? shown + " of " + cards.length : "";
+    noMatch.hidden = shown > 0;
+    for (const b of chips.querySelectorAll(".chip-btn")) {
+      const on = b.dataset.filter === "all" ? !state.kind && !state.tag
+        : b.dataset.filter === "kind" ? state.kind === b.dataset.value : state.tag === b.dataset.value;
+      b.classList.toggle("is-on", on);
+      b.setAttribute("aria-pressed", String(on));
+    }
+    if (push) {
+      const u = new URL(location.href);
+      for (const [k, v] of Object.entries({ q: text, kind: state.kind, tag: state.tag })) v ? u.searchParams.set(k, v) : u.searchParams.delete(k);
+      history.replaceState(null, "", u);
+    }
+  };
+
+  const read = () => {
+    const u = new URLSearchParams(location.search);
+    state = { text: u.get("q") ?? "", kind: u.get("kind") ?? "", tag: u.get("tag") ?? "" };
+    q.value = state.text;
+    apply(false);
+  };
+
+  q.addEventListener("input", () => { state.text = q.value; apply(true); });
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-filter]");
+    if (!b) return;
+    if (b.dataset.filter === "all") state = { text: state.text, kind: "", tag: "" };
+    // A second click on the same chip is how you take a filter off again.
+    else if (b.dataset.filter === "kind") state.kind = state.kind === b.dataset.value ? "" : b.dataset.value;
+    else if (b.dataset.filter === "tag") state.tag = state.tag === b.dataset.value ? "" : b.dataset.value;
+    apply(true);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "/" && document.activeElement !== q) { e.preventDefault(); q.focus(); }
+    if (e.key === "Escape" && document.activeElement === q) { q.value = ""; state.text = ""; apply(true); q.blur(); }
+  });
+  window.addEventListener("popstate", read);
+  read();
+})();
 </script>
 </body>
 </html>
@@ -216,7 +296,33 @@ const sections = Object.entries(KINDS)
       </div>
     </section>`).join("");
 
+// The filter row describes the catalogue as it is, not a list someone has to
+// remember to update. A tag earns a chip only once more than one project carries
+// it — a filter that can only ever return one card is a button, not a filter —
+// and the row is capped so it stays a row.
+const tagCounts = new Map();
+for (const p of listed) for (const t of p.tags ?? []) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+const tags = [...tagCounts.entries()].filter(([, n]) => n > 1).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 8).map(([t]) => t);
+
+// Controls, not decoration: they are hidden unless JavaScript is running, so a
+// page without it shows every project rather than a row of dead buttons.
+const filters = `
+      <div class="filters" role="search">
+        <label class="search">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input type="search" id="q" placeholder="Search experiments" autocomplete="off" aria-label="Search experiments">
+          <kbd>/</kbd>
+        </label>
+        <div class="chips" id="chips">
+          <button type="button" class="chip-btn is-on" data-filter="all">All</button>
+${Object.entries(KINDS).filter(([k]) => listed.some((p) => kindOfEntry(p) === k)).map(([k, v]) => `          <button type="button" class="chip-btn" data-filter="kind" data-value="${esc(k)}">${esc(v.name)}</button>`).join("\n")}
+${tags.map((t) => `          <button type="button" class="chip-btn chip-tag" data-filter="tag" data-value="${esc(t)}">${esc(t)}</button>`).join("\n")}
+        </div>
+        <p class="count" id="count" aria-live="polite"></p>
+      </div>`;
+
 const indexHtml = shell({
+  here: "projects",
   title: `${site.name} — experiments from ${site.company}`,
   description: site.tagline,
   body: `
@@ -230,8 +336,10 @@ const indexHtml = shell({
         <a href="${esc(site.repo)}/blob/main/JOIN.md">Bring a project</a>
       </div>
     </header>
-    <main class="wrap">
+    <main class="wrap" id="projects">
+${listed.length ? filters : ""}
 ${sections || `      <p class="empty">Nothing listed yet.</p>`}
+      <p class="empty" id="no-match" hidden>Nothing matches. <button type="button" class="btn btn-quiet" data-filter="all">Clear filters</button></p>
 
       <section class="section" id="platform">
         <div class="section-head"><h2>What Labs runs</h2><p>So a small project does not have to</p></div>

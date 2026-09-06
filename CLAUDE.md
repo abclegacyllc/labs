@@ -82,6 +82,7 @@ Makefile             the daily commands, and the only place systemd is driven �
 infra/deploy.sh      the platform's own deploy: pull, then make install / sync / render
 tools/requirements.sh what a machine needs (node >= 22, git, caddy, lingering) — reports, installs on ask
 docs/examples/       the three shapes of labs.json (hello / toolkit / consumer) — documentation, never hosted
+docs/direction.md    catalog vs console vs community — read before adding a framework, a login or a database
 var/                 gitignored realized state; never commit, never hand-edit
 ```
 
