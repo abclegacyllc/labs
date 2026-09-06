@@ -7,7 +7,7 @@ Read the four rules first; every later section is a consequence of one of them.
 ## The four rules
 
 1. **A secret never enters git.** Values live in `.env` (platform) or
-   `var/env/<id>.env` (written by `labs deploy`) on the server, nowhere else.
+   `var/projects/<id>/env` (written by `labs deploy`) on the server, nowhere else.
    Every committed file — Caddyfile, unit, workflow, code — refers to a secret by
    *name*. This repo is public: a leaked token is leaked to everyone, forever.
 
@@ -30,8 +30,9 @@ Read the four rules first; every later section is a consequence of one of them.
    it as environment variables, imports as copies it owns. Words are single-use:
    *service* is a project **kind** (does work), never the platform layer. Three files answer three questions and nothing is typed twice:
    `registry.json` (*who may be here*), the repo's `abc-labs/labs.json` (*what it
-   gives and takes*), `var/registry.d/<id>.json` (*what is actually deployed*).
-   The catalog, the pages, `index.json` and the MCP index read only the last.
+   gives and takes*), `var/projects/<id>/realized.json` (*what is actually
+   deployed*). The catalog, the pages, `index.json` and the MCP index read only
+   the last.
 
 4. **An experiment has a clock.** `started` + 14 days = `alphaBy`, computed by
    Labs, never declared by the project. Past it, a `building` card reads
@@ -71,7 +72,7 @@ platform/<id>/       capability.json (+ provision.mjs, routes.mjs, server.mjs) �
                      host = runs the process (port for life)
                      mcp  = the WHOLE mcp. host: Caddy → gateway → project. Limits per project and per caller live
                             there, and later OAuth; tiers come from registry.json, never from a project's manifest
-site/build.mjs       renderer: var/registry.d + platform/*/capability.json → site/dist/{index.html, <id>/, index.json}
+site/build.mjs       renderer: var/projects/*/realized.json + platform/*/capability.json → site/dist/{index.html, <id>/, index.json}
                      index.json is a PROJECTION — never leak assigned ports, dirs, env paths into it
 infra/Caddyfile.tmpl rendered by `labs render` to var/Caddyfile with {{root}} and the hosts from registry.json —
                      nothing in git names a machine; /etc/caddy/Caddyfile imports var/Caddyfile once, by hand
@@ -83,7 +84,11 @@ infra/deploy.sh      the platform's own deploy: pull, then make install / sync /
 tools/requirements.sh what a machine needs (node >= 22, git, caddy, lingering) — reports, installs on ask
 docs/examples/       the three shapes of labs.json (hello / toolkit / consumer) — documentation, never hosted
 docs/direction.md    catalog vs console vs community — read before adding a framework, a login or a database
-var/                 gitignored realized state; never commit, never hand-edit
+var/                 gitignored realized state; never commit, never hand-edit. PROJECT-CENTRED: everything Labs
+                     holds about a project is var/projects/<id>/ — realized.json (the listing), repo/ (checkout),
+                     env, the unit file (symlinked into systemd's dir), later cached icon/readme. `labs remove <id>`
+                     deletes that one folder and nothing is left behind. Only aggregates (var/routes, var/Caddyfile)
+                     live outside it
 ```
 
 ## Running it here
@@ -123,12 +128,16 @@ company map already does it — not a capability, and gets no card and no token.
 
 ## Deploying a guest
 
-`labs deploy <id>` = allowlist check → clone/pull into `var/projects/<id>` →
+`labs deploy <id>` = allowlist check → clone/pull into `var/projects/<id>/repo` →
 validate `abc-labs/labs.json` → provision each capability in `uses`, `host` first (it keeps
 or assigns the port — stable per id, from 8801 — so `mcp` can describe it) →
-`uses.host.install` → write `var/env/<id>.env` (0600) → render
-`project.service.tmpl` with `uses.host.start` → `systemctl --user enable --now`
-→ write `var/registry.d/<id>.json` → `render`. Hosting is a capability like any
+`uses.host.install` → write `var/projects/<id>/env` (0600) → render
+`project.service.tmpl` into `var/projects/<id>/labs-project-<id>.service`, symlink
+it into `~/.config/systemd/user/` → `systemctl --user enable --now` → write
+`var/projects/<id>/realized.json` → `render`. `labs remove <id>` reverses all of
+it by stopping the unit, unlinking it and deleting the folder. A sync that finds a
+manifest invalid only *unlists* (deletes realized.json; the process keeps running,
+the next good sync relists); leaving the allowlist also stops the process. Hosting is a capability like any
 other: a project that does not rent `host` is listed, not run, and needs only
 `sync` — which also routes `mcp` for a project that names an `upstream`. A
 project's other `uses` changes take effect on its next deploy, not on sync.
@@ -180,12 +189,12 @@ locally when asked; the human pushes. Do not add credentials to fix that.
 ## This checkout is live
 
 `labs.abclegacyllc.com` and `mcp.abclegacyllc.com` are served from **this**
-directory — `var/Caddyfile`, `site/dist`, `var/registry.d`, the running units.
+directory — `var/Caddyfile`, `site/dist`, `var/projects/`, the running units.
 Anything that writes `var/` here changes the public site within seconds. So:
 `npm run check` is safe (it renders, but from the real registry); `sync`,
 `deploy` and `import` round-trips against scratch repositories are **not** — run
 them in a throwaway copy (`git clone . /tmp/…/labs-test && cd there`), never in
-this checkout. If a test did touch `var/registry.d` here, delete the entry it
+this checkout. If a test did touch `var/projects/` here, delete the entry it
 wrote and `make render` — the catalog is only as honest as that directory.
 
 ## Before finishing a change
@@ -197,7 +206,7 @@ npm run check
 If you touched `lib/registry.mjs`, `bin/labs.mjs` or `platform/mcp/*`, also run
 a dry-run deploy against a scratch repo (a directory with `git init`, a
 `abc-labs/labs.json` and a `server.mjs`, pointed at from a temporary copy of
-`registry.json`) and read `var/routes/mcp.caddy`, `var/env/<id>.env` and the
+`registry.json`) and read `var/routes/web.caddy`, `var/projects/<id>/env` and the
 rendered card; and an import round-trip (producer with `install` → `sync` →
 `import` from a scratch consumer → `update` after a producer commit). Restore
 `registry.json` and delete `var/` afterwards. If you changed CONTRACT.md, the

@@ -12,7 +12,7 @@ the constraints of the most expensive.
 
 | | who it is for | what it must do | what it is built with |
 |---|---|---|---|
-| **Catalog** `labs.abclegacyllc.com` | a stranger, and a search engine | load fast, be indexable, work with JavaScript off, and keep working when everything else is down | static HTML rendered at deploy time from `var/registry.d`, plain CSS, a little progressive JavaScript |
+| **Catalog** `labs.abclegacyllc.com` | a stranger, and a search engine | load fast, be indexable, work with JavaScript off, and keep working when everything else is down | static HTML rendered at deploy time from `var/projects/`, plain CSS, a little progressive JavaScript |
 | **Console** `console.labs.abclegacyllc.com` | the Labs operator, and project owners | show live state, edit configuration, sit behind a login | a single-page app — React, Vite and Tailwind are the expected choice, matching abclegacyllc.com. **Not built** |
 | **Community** profiles, preferences, feedback | people who use the experiments | identity, storage, and everything that follows from holding user data | the console's stack plus a database and sessions. **Not built** |
 
@@ -29,7 +29,7 @@ What makes the next thing cheap is already here:
 - **`labs.abclegacyllc.com/index.json`** — the whole catalog as data, framework-free.
   The console will read it. So can anything else. This is the most portable thing
   Labs owns, and nothing may be added to the catalog that is not in it.
-- **Everything renders from data.** `var/registry.d` plus the tables in
+- **Everything renders from data.** `var/projects/` plus the tables in
   `lib/registry.mjs` produce the pages, the routes, the MCP index. A new field or
   a new view is a change in one place, not a hunt through markup.
 - **Origins are already separated.** Every project gets
@@ -51,7 +51,7 @@ be stated, and more expensive to *change* once built against a guess.
 | A framework for the catalog | the catalog stops being a list and starts holding state a visitor changes. Filtering and search did not need one; a saved view or a personal library would |
 | The console | the first thing an operator has to do that `make` cannot: approving a project, changing a tier, reading a project's logs from a browser |
 | Login, accounts, preferences | the first feature that is meaningless without knowing who is asking. Until then, no user data means no user data to lose |
-| A database | when `var/registry.d` — files rendered from repositories — can no longer answer the question. It answers every question asked so far |
+| A database | when `var/projects/` — files rendered from repositories — can no longer answer the question. It answers every question asked so far |
 | Rate limiting on `web` | a proxied project that gets enough traffic to matter. Static `dist` sites are served by Caddy and need none |
 
 ## Rules that outlive any of this

@@ -22,7 +22,7 @@ const port = Number(process.env.GATEWAY_PORT ?? 8800);
 const host = process.env.HOST ?? "127.0.0.1";
 const limiter = createLimiter();
 
-// var/registry.d is re-read on a short cycle, so a deploy or a sync shows up
+// var/projects/*/realized.json is re-read on a short cycle, so a deploy or a sync shows up
 // here within seconds and nothing has to restart.
 let cache = { at: 0, entries: [] };
 function entries() {

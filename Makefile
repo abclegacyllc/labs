@@ -25,7 +25,7 @@ GATEWAY_PORT   ?= 8800
 
 .DEFAULT_GOAL := help
 .PHONY: help requirements setup install uninstall start stop restart status logs tail \
-        sync deploy render list check dev clean nuke platform-start platform-stop caddy
+        sync deploy remove render list check dev clean nuke platform-start platform-stop caddy
 
 help:
 	@echo ''
@@ -43,6 +43,7 @@ help:
 	@echo '  The catalog and the projects'
 	@echo '    make sync            read every allowlisted repo'"'"'s abc-labs/labs.json, then render (also nightly, by timer)'
 	@echo '    make deploy ID=<id>  clone/pull one guest project, provision, start it'
+	@echo '    make remove ID=<id>  stop it and delete var/projects/<id>/ — everything Labs held about it'
 	@echo '    make render          rebuild routes, catalog, pages and index.json'
 	@echo '    make list            what is listed, where it runs, what it rents'
 	@echo ''
@@ -196,6 +197,11 @@ deploy:
 	@if [ -z "$(ID)" ]; then echo "usage: make deploy ID=<project id>   (make list to see them)"; exit 1; fi
 	@$(LABS) deploy $(ID)
 
+# make remove ID=svg
+remove:
+	@if [ -z "$(ID)" ]; then echo "usage: make remove ID=<project id>   (make list to see them)"; exit 1; fi
+	@$(LABS) remove $(ID)
+
 render:
 	@$(LABS) render
 
@@ -216,9 +222,11 @@ dev:
 clean:
 	@rm -rf site/dist && echo "  site/dist removed — make render to rebuild"
 
-# Removes the realized state: checkouts, listings, routes, env files. The
-# platform units and the allowlist survive; `make sync` and `make deploy` rebuild
-# the rest. Asks first, because var/env holds tokens handed to projects.
+# Removes ALL realized state — every var/projects/<id>/ folder and the generated
+# routes. The platform units and the allowlist survive; `make sync` and
+# `make deploy` rebuild the rest. Asks first: a project's env file may hold a
+# token, and its unit symlink in systemd's directory is removed with it.
 nuke:
-	@read -p "  remove var/ (project checkouts, listings, routes, env files)? [y/N] " a; \
+	@for u in $(PROJECT_UNITS); do systemctl --user disable --now $$u 2>/dev/null; rm -f '$(UNIT_DIR)'/$$u; done; systemctl --user daemon-reload
+	@read -p "  remove var/ (every project folder: checkout, listing, env, unit)? [y/N] " a; \
 		if [ "$$a" = y ] || [ "$$a" = Y ]; then rm -rf var site/dist && echo "  gone. make sync to start again."; else echo "  left alone"; fi

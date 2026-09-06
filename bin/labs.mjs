@@ -2,9 +2,10 @@
 // The Labs CLI. Two families of verbs.
 //
 // Platform verbs — run in the Labs checkout, on the Labs server:
-//   labs sync [id]                 every allowlisted repo's abc-labs/labs.json → var/registry.d, then render
-//   labs deploy <id> [--dry-run]   clone/pull a project renting host, provision what it rents, write its unit, start it
-//   labs render [--no-reload]      registry.d → routes/*.caddy + site/dist (catalog, pages, index.json), caddy reload
+//   labs sync [id]                 every allowlisted repo's abc-labs/labs.json → var/projects/<id>/, then render
+//   labs deploy <id> [--dry-run]   clone/pull a project renting host or web, provision what it rents, start it
+//   labs remove <id>               stop it, and delete var/projects/<id>/ — everything Labs held about it
+//   labs render [--no-reload]      var/projects/*/ → routes/*.caddy + site/dist (catalog, pages, index.json), caddy reload
 //   labs list                      what is listed, where it runs, what it rents
 //
 // Repository verbs — run in ANY repository (yours, a stranger's), from its root:
@@ -17,13 +18,14 @@
 // Runnable from the repository itself: npx github:abclegacyllc/labs import <id>
 import { spawnSync } from "node:child_process";
 import {
-  chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync,
+  chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import {
   DEFAULT_TIER, DIRS, LABS_DIR, LOCK_PATH, MANIFEST_PATH, MCP_TIERS, ROOT, VAR, ensureDirs, hosted, hostOf, kindOf, npxCommand, overdue,
-  readAllowlist, readJSON, readPlatform, readRealized, removeRealized, site, validateManifest, writeJSON, writeRealized,
+  projectDir, projectEnv, projectRepo, projectUnit, projectUnitFile, readAllowlist, readJSON, readPlatform, readRealized, removeProjectDir,
+  removeRealized, site, validateManifest, writeJSON, writeRealized,
 } from "../lib/registry.mjs";
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -69,7 +71,7 @@ function rawManifestUrl(repo) {
 // A hosted project's manifest is read from its checkout; a listed-only project's from
 // GitHub; a repo given as a local path (tests, a mirror) straight from disk.
 async function fetchManifest(p) {
-  for (const local of [join(DIRS.projects, p.id, MANIFEST_PATH), join(p.repo, MANIFEST_PATH)]) {
+  for (const local of [join(projectRepo(p.id), MANIFEST_PATH), join(p.repo, MANIFEST_PATH)]) {
     if (existsSync(local)) return { manifest: readJSON(local), source: local };
   }
   const url = rawManifestUrl(p.repo);
@@ -107,8 +109,11 @@ async function sync(only) {
     const allowed = new Set(allowlist.projects.map((p) => p.id));
     for (const old of realized) {
       if (!allowed.has(old.id)) {
+        // Out of the allowlist is Labs's decision, so its process stops now; the
+        // folder stays until `labs remove` so nothing is deleted by a timer.
+        stopUnit(old.id);
         removeRealized(old.id);
-        log(`  remove ${old.id} — no longer in registry.json`);
+        log(`  unlist ${old.id} — no longer in registry.json; its process is stopped. \`labs remove ${old.id}\` deletes var/projects/${old.id}/`);
       }
     }
   }
@@ -121,13 +126,13 @@ async function sync(only) {
     const errors = validateManifest(r.manifest, p.id, platform);
     if (errors.length) {
       removeRealized(p.id);
-      log(`  remove ${p.id} — invalid labs.json:\n    ${errors.join("\n    ")}`);
+      log(`  unlist ${p.id} — invalid labs.json (relisted by the next sync that finds it valid):\n    ${errors.join("\n    ")}`);
       skipped++;
       continue;
     }
     if (!r.manifest.export) {
       removeRealized(p.id);
-      log(`  remove ${p.id} — labs.json has no "export": it takes from Labs but is not a Labs project`);
+      log(`  unlist ${p.id} — labs.json has no "export": it takes from Labs but is not a Labs project`);
       skipped++;
       continue;
     }
@@ -151,7 +156,8 @@ async function deploy(id) {
   if (!id) fail("usage: labs deploy <id> [--dry-run]");
   const p = allowlisted(id);
   ensureDirs();
-  const dir = join(DIRS.projects, id);
+  const dir = projectRepo(id);
+  mkdirSync(projectDir(id), { recursive: true });
   if (existsSync(join(dir, ".git"))) { log(`pull ${id}`); sh("git", ["-C", dir, "pull", "--ff-only"]); }
   else { log(`clone ${id} ← ${p.repo}`); sh("git", ["clone", p.repo, dir]); }
   const commit = sh("git", ["-C", dir, "rev-parse", "--short", "HEAD"], { quiet: true }).stdout.trim();
@@ -209,22 +215,27 @@ async function deploy(id) {
   for (const [k, v] of Object.entries(env)) {
     if (!/^[A-Z][A-Z0-9_]*$/.test(k) || /[\s'"#\\]/.test(v)) fail(`env ${k}: a value systemd would misread — capabilities must hand out plain tokens`);
   }
-  const envFile = join(DIRS.env, `${id}.env`);
+  const envFile = projectEnv(id);
   writeFileSync(envFile, Object.entries(env).map(([k, v]) => `${k}=${v}`).join("\n") + "\n", { mode: 0o600 });
   chmodSync(envFile, 0o600);
   entry.assigned.envFile = envFile;
 
-  const unitName = `labs-project-${id}.service`;
+  // The unit file lives in the project's folder; systemd sees it through a
+  // symlink in its own directory. Delete the folder and nothing is orphaned.
+  const unitName = projectUnit(id);
+  const unitFile = projectUnitFile(id);
   const vars = { id, repo: p.repo, dir, envfile: envFile, start: start.replace(/'/g, "'\\''") };
   const unit = readFileSync(join(ROOT, "infra", "systemd", "project.service.tmpl"), "utf8")
     .replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? fail(`project.service.tmpl: unknown {{${k}}}`));
-  const unitDir = join(process.env.XDG_CONFIG_HOME ?? join(process.env.HOME, ".config"), "systemd", "user");
   entry.assigned.unit = unitName;
   if (dry) {
-    log(`dry-run: would write ${join(unitDir, unitName)} and restart it:\n${unit.replace(/^/gm, "    ")}`);
+    log(`dry-run: would write ${unitFile}, link it into ${UNIT_DIR} and restart it:\n${unit.replace(/^/gm, "    ")}`);
   } else {
-    mkdirSync(unitDir, { recursive: true });
-    writeFileSync(join(unitDir, unitName), unit);
+    writeFileSync(unitFile, unit);
+    mkdirSync(UNIT_DIR, { recursive: true });
+    const link = join(UNIT_DIR, unitName);
+    if (lexists(link)) unlinkSync(link);
+    symlinkSync(unitFile, link);
     sh("systemctl", ["--user", "daemon-reload"]);
     sh("systemctl", ["--user", "enable", "--now", unitName]);
     sh("systemctl", ["--user", "restart", unitName]);
@@ -232,6 +243,33 @@ async function deploy(id) {
   entry.deployedAt = new Date().toISOString();
   writeRealized(entry);
   log(`deploy: ${id} @ ${commit} → 127.0.0.1:${entry.assigned.port}${dry ? " (dry-run)" : ""}`);
+  await render();
+}
+
+const UNIT_DIR = join(process.env.XDG_CONFIG_HOME ?? join(process.env.HOME, ".config"), "systemd", "user");
+
+// Stop a project's process and take its unit out of systemd's sight. Safe to call
+// for a project that never had one.
+function stopUnit(id) {
+  const link = join(UNIT_DIR, projectUnit(id));
+  if (!lexists(link)) return false;
+  // A unit whose file is a symlink out of the search path is "linked", and
+  // `disable` removes that link itself — so the removal below must tolerate it
+  // already being gone.
+  spawnSync("systemctl", ["--user", "disable", "--now", projectUnit(id)], { stdio: "ignore" });
+  rmSync(link, { force: true });
+  spawnSync("systemctl", ["--user", "daemon-reload"], { stdio: "ignore" });
+  return true;
+}
+
+// Everything Labs holds about a project is one folder, so removing a project is
+// removing that folder — after its process is stopped and its unit unlinked.
+async function remove(id) {
+  if (!id) fail("usage: labs remove <id>");
+  if (!existsSync(projectDir(id))) fail(`${id}: nothing here — var/projects/${id}/ does not exist`);
+  const had = stopUnit(id);
+  removeProjectDir(id);
+  log(`remove: ${id} — ${had ? "process stopped, unit unlinked, " : ""}var/projects/${id}/ deleted${readAllowlist().projects.some((p) => p.id === id) ? `; still in registry.json, so the next sync relists it (without a checkout)` : ""}`);
   await render();
 }
 
@@ -449,6 +487,7 @@ async function update(only) {
 switch (cmd) {
   case "sync": await sync(args[0]); break;
   case "deploy": await deploy(args[0]); break;
+  case "remove": await remove(args[0]); break;
   case "render": await render(); break;
   case "list": list(); break;
   case "export": case "validate": exportCheck(args[0]); break;

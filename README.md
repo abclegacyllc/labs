@@ -102,12 +102,16 @@ var/                   gitignored — what is actually true on this machine (see
 
 Three files, three questions: `registry.json` — *who may be here?* `abc-labs/labs.json`
 (in the project's repo) — *what does it give, what does it take?*
-`var/registry.d/<id>.json` — *what is actually deployed?* The catalog, the
+`var/projects/<id>/realized.json` — *what is actually deployed?* The catalog, the
 public `index.json` and the MCP index read only the last.
 
 ```
-var/projects/<id>/      guest checkouts          var/registry.d/<id>.json  listings
-var/routes/*.caddy      generated Caddy routes   var/env/<id>.env          env injected into units
+var/projects/<id>/            everything Labs holds about one project — delete the folder, the project is gone
+  realized.json                 the listing: its manifest plus what Labs assigned (port, origin, tier, when)
+  repo/                         its checkout, if hosted or serving files
+  env                           what its process receives, 0600
+  labs-project-<id>.service     its unit, symlinked into systemd's directory
+var/routes/*.caddy            generated from all projects — the one thing that spans them
 ```
 
 ## Running it
@@ -121,6 +125,7 @@ make status          # units, whether the gateway answers, what is listed
 make logs            # last 40 lines from each unit   (make tail to follow)
 make sync            # read every allowlisted repo, then render
 make deploy ID=<id>  # clone/pull one guest project, provision, start it
+make remove ID=<id>  # stop it and delete everything Labs held about it
 make dev             # the gateway in the foreground on port 18800, for poking with curl
 ```
 
@@ -137,9 +142,10 @@ this machine.
 
 ```bash
 # platform — in the Labs checkout
-bin/labs sync                 # every allowlisted repo's abc-labs/labs.json → var/registry.d, then render
+bin/labs sync                 # every allowlisted repo's abc-labs/labs.json → var/projects/*/realized.json, then render
 bin/labs deploy <id>          # clone/pull, provision capabilities, write unit, start, render   (--dry-run)
-bin/labs render               # registry.d → routes + catalog + pages + index.json, caddy reload if wired in
+bin/labs remove <id>          # stop it and delete var/projects/<id>/ — nothing left behind
+bin/labs render               # var/projects/*/ → routes + catalog + pages + index.json, caddy reload if wired in
 bin/labs list
 
 # any repository — from its root; `npx github:abclegacyllc/labs …` runs the same file

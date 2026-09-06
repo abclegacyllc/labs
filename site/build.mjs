@@ -1,5 +1,5 @@
 // Renders labs.abclegacyllc.com from two sources and nothing else:
-//   var/registry.d/*.json        the projects — what `labs sync` / `labs deploy` made true
+//   var/projects/*/realized.json the projects — what `labs sync` / `labs deploy` made true
 //   platform/*/capability.json   the platform — what Labs runs for projects
 //
 //   node site/build.mjs   (usually via `labs render`)

@@ -171,7 +171,7 @@ Nothing runs on our machine unless you rent `host`.
 
 ### Renting `host` — Labs runs your process
 
-`labs deploy <id>` clones your repo into `var/projects/<id>/`, runs
+`labs deploy <id>` clones your repo into `var/projects/<id>/repo/`, runs
 `uses.host.install`, provisions every capability in `uses`, writes one systemd
 user unit, starts `uses.host.start` in your checkout. Your process receives:
 

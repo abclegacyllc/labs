@@ -16,7 +16,7 @@ WorkingDirectory=%h/labs
 # .env is read by node, not by systemd's EnvironmentFile: one parser, one meaning.
 ExecStart=/usr/bin/node --env-file-if-exists=.env platform/mcp/server.mjs
 
-# The gateway reads var/registry.d and registry.json and writes nothing at all,
+# The gateway reads var/projects/*/realized.json and registry.json and writes nothing at all,
 # so it runs with the filesystem read-only and no write path declared. Same set
 # as project.service.tmpl gives a guest — the platform should not be the softest
 # thing on the machine.

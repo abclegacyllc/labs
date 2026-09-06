@@ -95,7 +95,7 @@ or an issue; only the allowlist grants one.
 allocate resources (a port, a path, a token, a database) — idempotently, because
 deploys repeat. `host` is always provisioned first, so later capabilities can read
 `entry.assigned.port`. Whatever `provision` returns in `env` is written to
-`var/env/<id>.env` and injected into the project's unit; values must be plain
+`var/projects/<id>/env` and injected into the project's unit; values must be plain
 tokens (no spaces, quotes, `#`). `mcp` is also provisioned on `sync` for a
 project that names an `upstream` and rents no `host` — it runs elsewhere, but its
 route is ours.
