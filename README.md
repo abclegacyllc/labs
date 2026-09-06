@@ -121,14 +121,16 @@ var/routes/*.caddy            generated from all projects — the one thing that
 ## Running it
 
 ```bash
+make restart         # after ANY change: unit files → listings → build → processes, in that order
 make                 # the list
 make requirements    # what this box has and what it is missing   (make setup installs it)
 make install         # hand the platform units to systemd — start at boot, restart on crash
-make start           # start the platform and every deployed project   (stop, restart, status)
+make start           # start the platform and every deployed project   (stop, bounce, status)
 make status          # units, whether the gateway answers, what is listed
 make logs            # last 40 lines from each unit   (make tail to follow)
 make sync            # read every allowlisted repo, then render
 make deploy ID=<id>  # clone/pull one guest project, provision, start it
+make redeploy        # pull and redeploy every project Labs has a checkout of
 make remove ID=<id>  # stop it and delete everything Labs held about it
 make dev             # the gateway in the foreground on port 18800, for poking with curl
 ```
@@ -146,8 +148,8 @@ this machine.
 
 ```bash
 # platform — in the Labs checkout
-bin/labs sync                 # every allowlisted repo's abc-labs/labs.json → var/projects/*/realized.json, then render
-bin/labs deploy <id>          # clone/pull, provision capabilities, write unit, start, render   (--dry-run)
+bin/labs sync                 # every allowlisted repo's abc-labs/labs.json → var/projects/*/realized.json, then render   (--no-render)
+bin/labs deploy <id>          # clone/pull, provision capabilities, write unit, start, render   (--dry-run, --all)
 bin/labs remove <id>          # stop it and delete var/projects/<id>/ — nothing left behind
 bin/labs render               # var/projects/*/ → routes + catalog + pages + index.json, caddy reload if wired in
 bin/labs list

@@ -2,8 +2,9 @@
 // The Labs CLI. Two families of verbs.
 //
 // Platform verbs — run in the Labs checkout, on the Labs server:
-//   labs sync [id]                 every allowlisted repo's abc-labs/labs.json → var/projects/<id>/, then render
+//   labs sync [id] [--no-render]   every allowlisted repo's abc-labs/labs.json → var/projects/<id>/, then render
 //   labs deploy <id> [--dry-run]   clone/pull a project renting host or web, provision what it rents, start it
+//   labs deploy --all              the same for every project Labs already has a checkout of
 //   labs remove <id>               stop it, and delete var/projects/<id>/ — everything Labs held about it
 //   labs render [--no-reload]      var/projects/*/ → routes/*.caddy + site/dist (catalog, pages, index.json), caddy reload
 //   labs list                      what is listed, where it runs, what it rents
@@ -190,11 +191,25 @@ async function sync(only) {
     ok++;
   }
   log(`sync: ${ok} listed, ${skipped} skipped`);
-  await render();
+  // A caller that renders anyway — `make restart` — passes --no-render, so the
+  // catalog is built once and Caddy is reloaded once.
+  if (!flags.has("--no-render")) await render();
+}
+
+// Every project Labs has cloned — the ones it runs or serves files for. Their
+// own install commands run again, which is why this is never a side effect of
+// something else.
+async function deployAll() {
+  const ids = existsSync(DIRS.projects)
+    ? readdirSync(DIRS.projects, { withFileTypes: true }).filter((d) => d.isDirectory() && existsSync(join(projectRepo(d.name), ".git"))).map((d) => d.name).sort()
+    : [];
+  if (!ids.length) return log("nothing to redeploy — no project has a checkout here");
+  log(`redeploy: ${ids.join(", ")}`);
+  for (const id of ids) { log(`\n── ${id}`); await deploy(id); }
 }
 
 async function deploy(id) {
-  if (!id) fail("usage: labs deploy <id> [--dry-run]");
+  if (!id) fail("usage: labs deploy <id> [--dry-run]   (or --all)");
   const p = allowlisted(id);
   ensureDirs();
   const dir = projectRepo(id);
@@ -550,7 +565,7 @@ async function update(only) {
 
 switch (cmd) {
   case "sync": await sync(args[0]); break;
-  case "deploy": await deploy(args[0]); break;
+  case "deploy": await (flags.has("--all") ? deployAll() : deploy(args[0])); break;
   case "remove": await remove(args[0]); break;
   case "render": await render(); break;
   case "list": list(); break;

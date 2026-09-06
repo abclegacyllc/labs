@@ -15,12 +15,9 @@ before=$(git rev-parse HEAD)
 git pull --ff-only
 echo "platform: $before → $(git rev-parse HEAD)"
 
-make install
-
-# Listings may have changed upstream (a project edited its abc-labs/labs.json);
-# routes and the catalog are re-rendered either way. sync needs the network, so
-# it may fail; that must not stop the deploy.
-make sync || echo "sync failed — listings kept as they were"
-make render
+# Exactly what a human types after changing anything: unit files, listings,
+# build, processes. One copy of those steps, in the Makefile, so a deploy from
+# CI and a deploy by hand cannot drift.
+make restart
 
 echo "platform: done"

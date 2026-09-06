@@ -24,7 +24,7 @@ UNITS             = $(PLATFORM_UNITS) $(PROJECT_UNITS)
 GATEWAY_PORT   ?= 8800
 
 .DEFAULT_GOAL := help
-.PHONY: help requirements setup install uninstall start stop restart status logs tail \
+.PHONY: help requirements setup units install uninstall start stop restart bounce redeploy status logs tail \
         sync deploy remove render list check dev clean nuke platform-start platform-stop caddy
 
 help:
@@ -33,9 +33,10 @@ help:
 	@echo ''
 	@echo '  Running it'
 	@echo '    make install         hand the platform units to systemd — survive reboots and crashes'
+	@echo '    make restart         THE one after any change: unit files, listings, build, processes'
 	@echo '    make start           start the platform and every deployed project'
 	@echo '    make stop            stop them'
-	@echo '    make restart         stop, then start'
+	@echo '    make bounce          restart the processes only — no fetch, no build'
 	@echo '    make status          what is up, what is listed, and is the gateway answering'
 	@echo '    make logs            last 40 lines from each unit'
 	@echo '    make tail            follow every unit live (ctrl-c to leave)'
@@ -43,6 +44,7 @@ help:
 	@echo '  The catalog and the projects'
 	@echo '    make sync            read every allowlisted repo'"'"'s abc-labs/labs.json, then render (also nightly, by timer)'
 	@echo '    make deploy ID=<id>  clone/pull one guest project, provision, start it'
+	@echo '    make redeploy        pull and redeploy every project Labs has a checkout of'
 	@echo '    make remove ID=<id>  stop it and delete var/projects/<id>/ — everything Labs held about it'
 	@echo '    make render          rebuild routes, catalog, pages and index.json'
 	@echo '    make list            what is listed, where it runs, what it rents'
@@ -112,10 +114,15 @@ caddy:
 # Copies the platform units into the user's systemd directory and enables them.
 # Project units are written by `labs deploy` and are already enabled; they are
 # left alone here.
-install:
+# The unit files, copied and re-read. Shared by install and restart, because a
+# unit that changed in git changes nothing until both of these have happened.
+units:
 	@mkdir -p '$(UNIT_DIR)'
-	@for u in $(PLATFORM_UNITS) $(PLATFORM_ONESHOT) $(PLATFORM_TIMERS); do cp infra/systemd/$$u '$(UNIT_DIR)'/$$u && echo "  $$u"; done
+	@for u in $(PLATFORM_UNITS) $(PLATFORM_ONESHOT) $(PLATFORM_TIMERS); do cp infra/systemd/$$u '$(UNIT_DIR)'/$$u; done
 	@systemctl --user daemon-reload
+
+install: units
+	@for u in $(PLATFORM_UNITS) $(PLATFORM_ONESHOT) $(PLATFORM_TIMERS); do echo "  $$u"; done
 	@systemctl --user enable --now $(PLATFORM_UNITS) $(PLATFORM_TIMERS)
 	@# Copying a unit changes nothing until it restarts — that is how a broken
 	@# hardening directive stayed invisible for three days.
@@ -144,9 +151,36 @@ stop:
 	@systemctl --user stop $(UNITS) 2>&1 | sed 's/^/  /' || true
 	@echo "  stopped: $(words $(UNITS)) unit(s)"
 
+# THE command after any change. Four steps, in the only order that works: a unit
+# file is no use until systemd re-reads it; the listings decide what gets
+# rendered; the render decides what Caddy serves; and only then is there a point
+# in restarting a process. Every step is safe to repeat, so this is safe to run
+# when you are not sure what changed — which is most of the time.
+#
+# It does NOT pull guest repositories: that would run install commands from
+# somebody else's project as a side effect of restarting yours. `make redeploy`
+# does that, on purpose and by itself.
 restart:
+	@echo ''
+	@echo '  1/4  unit files → systemd'
+	@$(MAKE) --no-print-directory units
+	@echo '  2/4  listings ← every allowlisted repository'
+	@$(LABS) sync --no-render 2>&1 | sed 's/^/       /' || echo '       sync failed — listings kept as they were'
+	@echo '  3/4  routes, catalog, Caddyfile'
+	@$(LABS) render 2>&1 | sed 's/^/       /'
+	@echo '  4/4  processes'
+	@systemctl --user restart $(UNITS) 2>&1 | sed 's/^/       /' || true
+	@$(MAKE) --no-print-directory status
+
+# Just the processes — no fetch, no build. For when you know that is all you want.
+bounce:
 	@systemctl --user restart $(UNITS) 2>&1 | sed 's/^/  /' || true
 	@$(MAKE) --no-print-directory status
+
+# Pull and redeploy every project Labs has a checkout of. Separate from restart
+# because it runs each project's own install command.
+redeploy:
+	@$(LABS) deploy --all
 
 platform-start:
 	@systemctl --user start $(PLATFORM_UNITS) && $(MAKE) --no-print-directory status

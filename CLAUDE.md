@@ -82,8 +82,11 @@ infra/Caddyfile.tmpl rendered by `labs render` to var/Caddyfile with {{root}} an
                      nothing in git names a machine; /etc/caddy/Caddyfile imports var/Caddyfile once, by hand
 infra/systemd/       labs-*.service = platform processes; labs-sync.timer fires labs-sync.service nightly (a
                      one-shot — the Makefile installs it but never enables it alone); project.service.tmpl = what guests get
-Makefile             the daily commands, and the only place systemd is driven — infra/deploy.sh calls it rather
-                     than copying it, so a deploy from CI and a deploy by hand cannot drift
+Makefile             the daily commands, and the only place systemd is driven. `make restart` is the whole
+                     pipeline — units → sync --no-render → render → restart → status — and infra/deploy.sh is
+                     `git pull` plus that one target, so CI and a human cannot drift. `make bounce` is
+                     processes only; `make redeploy` (= labs deploy --all) pulls guests, kept out of restart
+                     because it runs their install commands
 infra/deploy.sh      the platform's own deploy: pull, then make install / sync / render
 tools/requirements.sh what a machine needs (node >= 22, git, caddy, lingering) — reports, installs on ask
 docs/examples/       the three shapes of labs.json (hello / toolkit / consumer) — documentation, never hosted
@@ -99,6 +102,7 @@ var/                 gitignored realized state; never commit, never hand-edit. P
 ## Running it here
 
 ```bash
+make restart                       # after ANY change: unit files → listings → build → processes. Repeatable.
 npm run check                      # syntax, the three examples, a render, caddy validate — no network
 bin/labs sync                      # reads the allowlisted repos' abc-labs/labs.json from GitHub
 bin/labs deploy <id> --dry-run     # everything except install, systemctl and caddy
