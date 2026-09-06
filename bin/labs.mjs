@@ -21,12 +21,13 @@ import {
   chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import {
-  DEFAULT_TIER, DIRS, LABS_DIR, LOCK_PATH, MANIFEST_PATH, MCP_TIERS, ROOT, VAR, ensureDirs, hosted, hostOf, kindOf, npxCommand, overdue,
-  projectDir, projectEnv, projectRepo, projectUnit, projectUnitFile, readAllowlist, readJSON, readPlatform, readRealized, removeProjectDir,
-  removeRealized, site, validateManifest, writeJSON, writeRealized,
+  DEFAULT_TIER, DIRS, ICON_MAX_BYTES, LABS_DIR, LABS_FILES, LOCK_PATH, MANIFEST_PATH, MCP_TIERS, ROOT, TEXT_MAX_BYTES, VAR, ensureDirs, hosted,
+  hostOf, kindOf, npxCommand, overdue, projectCache, projectDir, projectEnv, projectRepo, projectUnit, projectUnitFile, readAllowlist, readJSON,
+  readPlatform, readRealized, removeProjectDir, removeRealized, site, validateManifest, writeJSON, writeRealized,
 } from "../lib/registry.mjs";
+import { latestSection } from "../lib/markdown.mjs";
 
 const [cmd, ...rest] = process.argv.slice(2);
 const flags = new Set(rest.filter((a) => a.startsWith("--") && !a.includes("=")));
@@ -63,9 +64,48 @@ function checkTier(p) {
   }
 }
 
-function rawManifestUrl(repo) {
+function rawUrl(repo, path) {
   const m = repo.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
-  return m ? `https://raw.githubusercontent.com/${m[1]}/${m[2]}/HEAD/${MANIFEST_PATH}` : null;
+  return m ? `https://raw.githubusercontent.com/${m[1]}/${m[2]}/HEAD/${path}` : null;
+}
+const rawManifestUrl = (repo) => rawUrl(repo, MANIFEST_PATH);
+
+// One file out of a project's abc-labs/, the same three ways the manifest is
+// read: its checkout here, a repo given as a local path, or GitHub. null when
+// the project simply does not ship it.
+async function fetchProjectFile(p, rel) {
+  for (const local of [join(projectRepo(p.id), LABS_DIR, rel), join(p.repo, LABS_DIR, rel)]) {
+    if (existsSync(local)) return readFileSync(local);
+  }
+  const url = rawUrl(p.repo, `${LABS_DIR}/${rel}`);
+  if (!url) return null;
+  try {
+    const res = await fetch(url, { headers: { "user-agent": "abc-legacy-labs" } });
+    return res.ok ? Buffer.from(await res.arrayBuffer()) : null;
+  } catch { return null; }
+}
+
+// README, CHANGELOG and an icon, if the project ships them, kept in its own
+// cache/ so the catalog serves them from here and never hotlinks to GitHub. The
+// cache is rebuilt every time, so a file the project deleted disappears too.
+async function cacheProjectFiles(p, entry) {
+  const dir = projectCache(p.id);
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  const cache = {};
+  for (const [key, rel] of [["readme", LABS_FILES.readme], ["changelog", LABS_FILES.changelog]]) {
+    const buf = await fetchProjectFile(p, rel);
+    if (!buf) continue;
+    if (buf.length > TEXT_MAX_BYTES) { log(`  ${p.id}: abc-labs/${rel} is ${Math.round(buf.length / 1024)} KB — over ${TEXT_MAX_BYTES / 1024} KB, not shown`); continue; }
+    writeFileSync(join(dir, rel), buf); cache[key] = rel;
+  }
+  for (const rel of LABS_FILES.icons) {
+    const buf = await fetchProjectFile(p, rel);
+    if (!buf) continue;
+    if (buf.length > ICON_MAX_BYTES) { log(`  ${p.id}: abc-labs/${rel} is ${Math.round(buf.length / 1024)} KB — over ${ICON_MAX_BYTES / 1024} KB, not shown`); continue; }
+    writeFileSync(join(dir, rel), buf); cache.icon = rel; break;
+  }
+  entry.cache = cache;
 }
 
 // A hosted project's manifest is read from its checkout; a listed-only project's from
@@ -137,6 +177,7 @@ async function sync(only) {
       continue;
     }
     const entry = realize(p, r.manifest.export, prev.get(p.id));
+    await cacheProjectFiles(p, entry);
     // A project served elsewhere still needs its route: provision mcp on sync when it
     // names an upstream — deploy never runs for it, there is nothing to run here.
     const up = r.manifest.export.uses?.mcp?.upstream;
@@ -179,6 +220,7 @@ async function deploy(id) {
   const entry = realize(p, ex, all.find((e) => e.id === id));
   entry.commit = commit;
   entry.assigned.dir = dir;
+  await cacheProjectFiles(p, entry);
 
   // What every project gets, then what each rented capability adds. `host` goes
   // first because it assigns the port other capabilities (mcp) describe.
@@ -342,6 +384,28 @@ function exportCheck(path) {
       const fileOnly = got.filter((g) => !g.dir && readdirSync(join(repoRoot, dirname(g.path))).length > 1);
       if (fileOnly.length) console.error(`  warning: ${fileOnly.length} match${fileOnly.length === 1 ? " is a file" : "es are files"} with siblings left behind (e.g. ${fileOnly[0].path}) — match the folder, so references/, tools/ and the like travel too`);
     }
+  }
+  // The rest of abc-labs/ — README, CHANGELOG, icon — is read by fixed name, so
+  // the gate can say exactly what Labs will and will not find, and why.
+  if (m.export && resolve(file) === join(repoRoot, MANIFEST_PATH)) {
+    const folder = join(repoRoot, LABS_DIR);
+    const found = [];
+    for (const [key, rel, max] of [["readme", LABS_FILES.readme, TEXT_MAX_BYTES], ["changelog", LABS_FILES.changelog, TEXT_MAX_BYTES]]) {
+      const f = join(folder, rel);
+      if (!existsSync(f)) continue;
+      const size = readFileSync(f).length;
+      if (size > max) console.error(`  warning: abc-labs/${rel} is ${Math.round(size / 1024)} KB — over ${max / 1024} KB, Labs will not show it`);
+      else if (key === "changelog" && !latestSection(readFileSync(f, "utf8"))) console.error(`  warning: abc-labs/${rel} has no release heading (## 1.2.3 …) — nothing to show as "What's new"`);
+      else found.push(rel);
+    }
+    const icon = LABS_FILES.icons.map((rel) => join(folder, rel)).find(existsSync);
+    if (icon) {
+      const size = readFileSync(icon).length;
+      if (size > ICON_MAX_BYTES) console.error(`  warning: abc-labs/${basename(icon)} is ${Math.round(size / 1024)} KB — over ${ICON_MAX_BYTES / 1024} KB, Labs will not show it`);
+      else found.push(basename(icon));
+    }
+    log(`  abc-labs/ also ships: ${found.length ? found.join(", ") : "nothing beyond labs.json — README.md, CHANGELOG.md and icon.svg are welcome (JOIN.md §7b)"}`);
+    if (m.export.version && !found.includes(LABS_FILES.changelog)) log(`  hint: a version without a CHANGELOG.md — visitors see the number but not what changed`);
   }
   if (m.export) parts.push(`exports "${m.export.id}" — ${m.export.kind ?? kindOf(m.export.category)}/${m.export.category}, met as ${Object.keys(m.export.surfaces ?? {}).join(", ")}${hosted(m.export) ? " (run here)" : ""}${m.export.uses ? `, rents ${Object.keys(m.export.uses).join(", ")}` : ""}${m.export.tags?.length ? `, tags ${m.export.tags.join(" ")}` : ""}`);
   if (m.import) parts.push(`imports ${Object.entries(m.import).map(([k, v]) => `${k}@${v}`).join(", ")}`);

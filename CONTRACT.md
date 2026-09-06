@@ -21,11 +21,17 @@ at a glance — *this is the Labs integration; the rest is the project*:
   abc-labs/
     labs.json        written by you:  "export" — what this repo gives Labs
                                       "import" — what it takes from Labs
+    README.md        optional — rendered on your project page as "About"
+    CHANGELOG.md     optional — its newest section is shown as "What's new"
+    icon.svg|png     optional — your icon, ≤ 64 KB, served as an <img>
     labs.lock.json   written by the CLI: the exact commit behind every import
     <id>/            files of each imported project
-    README.md        optional, for humans
   src/ …             the project itself
 ```
+
+Labs reads **this folder and nothing else** in your repository, and only by these
+fixed names — never a path your manifest points at. That is what keeps Labs from
+learning your layout: reorganise the rest of the repo and nothing here notices.
 
 Four rules keep the folder from becoming a dependency:
 
@@ -89,6 +95,8 @@ Check it: `npx github:abclegacyllc/labs export` from your repository root (or
 | `surfaces` | required | one or more — *where is it met?* Below |
 | `tags` | optional | up to five lowercase slugs — *what is it about?* `ux`, `3d`, `telematics` |
 | `license` | optional | an SPDX identifier: `MIT`, `Apache-2.0`, `CC0-1.0` |
+| `version` | optional | the version that is live, `1.2.3`-shaped. Have your release script write it; Labs shows it, never bumps it |
+| `requires` | optional | up to eight short phrases a user needs first — `["Tampermonkey", "Chrome or Edge"]` |
 | `status` | required | `building` · `alpha` · `beta` · `graduated` · `archived` — you set it, Labs enforces the clock |
 | `started` | required | `YYYY-MM-DD`; `alphaBy` is computed as `started + 14 days` |
 | `uses` | optional | platform capabilities you rent, keyed by id — [platform/](platform/README.md) |

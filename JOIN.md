@@ -9,12 +9,21 @@ unclear.
 
 ## 0. What you will produce
 
-One folder, one file, at the repository root:
+One folder at the repository root, with one required file and a few optional
+ones — **all under fixed names**:
 
 ```
 abc-labs/
-  labs.json
+  labs.json        required — what you are and what you rent
+  README.md        optional — rendered on your project page: your own story, in your words
+  CHANGELOG.md     optional — its newest section is shown as "What's new"
+  icon.svg         optional — your card's icon (or icon.png; ≤ 64 KB; shown as an <img>)
 ```
+
+Labs reads **only this folder**, and only these names. It never follows a path
+into the rest of your repository, so you can reorganise everything else without
+telling anyone. Put what you want shown here; how it gets here — copied by your
+build, written by your release script — is your business.
 
 Nothing else changes in the code. Never put a secret in it. Never make the code
 import anything from `abc-labs/` — the folder is metadata and vendored files, not
@@ -53,6 +62,8 @@ that does not (§3).
     },
     "tags": ["<optional: up to 5 lowercase slugs — what it is ABOUT: ux, 3d, telematics>"],
     "license": "<optional: SPDX id — MIT | Apache-2.0 | CC0-1.0 | …>",
+    "version": "<optional: 1.2.3 — the version that is live. Have your release script write it here; a version bumped by hand drifts>",
+    "requires": ["<optional: up to 8 short things a user needs first — Tampermonkey, Chrome or Edge, node 22>"],
 
     "status": "<building | alpha | beta | graduated | archived — see §5>",
     "started": "<YYYY-MM-DD — first commit date is a fine default>",
@@ -206,6 +217,19 @@ For an Agent Skills pack (`"ai": { "format": "agent-skill" }`) the link is almos
 always `".claude/skills/{name}": "abc-labs/<id>/{name}"` — that is where Claude
 Code looks; a claude.ai user uploads the same folder by hand. Sources must point inside
 `abc-labs/<id>/`; an existing real file at a destination is never overwritten.
+
+## 7b. The rest of `abc-labs/` — say more, safely
+
+| file | what happens to it | rules |
+|---|---|---|
+| `README.md` | rendered on your project page under **About** | Markdown, a safe subset: headings, lists, code, links, emphasis. Raw HTML is shown as text, not run. No images. Write it for a stranger — the repository README can stay technical |
+| `CHANGELOG.md` | its **first release section** appears as *What's new* — the heading and what is under it | any heading style works; a `# Changelog` title on top is skipped. Newest release first |
+| `icon.svg` or `icon.png` | your card's icon and your page's | ≤ 64 KB; square; served as an image, never inlined, so it can contain no script that runs on the catalog |
+| `version` in `labs.json` | shown on the card next to the category, and on the page | make your release script write it — `jq`, `sed`, a build step — so it moves when the real version moves |
+
+All optional. A project that ships only `labs.json` looks exactly as it does today.
+Labs re-reads the folder on every sync, so editing any of these is how you update
+your page; nothing is asked of Labs.
 
 ## 8. Validate — do not skip
 

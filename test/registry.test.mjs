@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { normalizeHttpUrl, readPlatform, validateManifest } from "../lib/registry.mjs";
 import { clientOf, createLimiter } from "../platform/mcp/limits.mjs";
+import { latestSection, renderMarkdown } from "../lib/markdown.mjs";
 
 const base = (surface = { app: { url: "https://example.com/app" } }) => ({
   labs: 1,
@@ -103,4 +104,30 @@ test("an internal tier is not limited at all", () => {
   const entry = { id: "labs", tier: "internal" };
   for (let i = 0; i < 500; i++) assert.ok(limiter.admit(entry, "a").ok);
   limiter.stop();
+});
+
+test("a project's README can describe an attack but not perform one", () => {
+  const html = renderMarkdown("Hi <script>alert(1)</script> and <img src=x onerror=alert(1)> [x](javascript:alert(1)) [ok](https://a.b/c) `<b>`");
+  assert.ok(!html.includes("<script"), "script tags are escaped");
+  assert.ok(!html.includes("<img"), "no images at all");
+  assert.ok(!html.includes('href="javascript'), "non-http links are not links");
+  assert.ok(html.includes('<a href="https://a.b/c" rel="noopener">ok</a>'), "https links survive");
+  assert.ok(html.includes("<code>&lt;b&gt;</code>"), "code spans are escaped");
+});
+
+test("the changelog's newest section is found under a document title", () => {
+  const md = "# Changelog\n\nAll notable changes.\n\n## 3.8.173 — 2026-09-04\n- fixed x\n\n## 3.8.172\n- old";
+  const l = latestSection(md);
+  assert.equal(l.title, "3.8.173 — 2026-09-04");
+  assert.equal(l.body, "- fixed x");
+  assert.equal(latestSection("no headings"), null);
+});
+
+test("version and requires are checked for shape", () => {
+  const ex = (extra) => ({ labs: 1, export: { id: "demo", name: "D", tagline: "t", kind: "service", category: "tool", surfaces: { cli: { command: "x" } }, status: "alpha", started: "2026-01-01", ...extra } });
+  assert.equal(validateManifest(ex({ version: "3.8.173", requires: ["Tampermonkey"] }), null, readPlatform()).length, 0);
+  assert.equal(validateManifest(ex({ version: "v1.2.3-beta.1" }), null, readPlatform()).length, 0);
+  assert.ok(validateManifest(ex({ version: "latest" }), null, readPlatform()).some((e) => e.includes("version")));
+  assert.ok(validateManifest(ex({ requires: "Tampermonkey" }), null, readPlatform()).some((e) => e.includes("requires")));
+  assert.ok(validateManifest(ex({ requires: Array(9).fill("x") }), null, readPlatform()).some((e) => e.includes("requires")));
 });

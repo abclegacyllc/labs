@@ -15,13 +15,14 @@
 // documentation; a visitor gets "Install", "Connect", "Import".
 //
 // Zero dependencies on purpose. Edit the sources or this file — never dist/.
-import { copyFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  AI_FORMATS, CATEGORIES, KINDS, LABS_DIR, STATUS_TEXT, SURFACES, alphaBy, kindOf, npxCommand, overdue, projectUrl, readPlatform,
-  readRealized, site as readSite, tierOf,
+  AI_FORMATS, CATEGORIES, KINDS, LABS_DIR, STATUS_TEXT, SURFACES, alphaBy, kindOf, npxCommand, overdue, projectCache, projectUrl,
+  readPlatform, readRealized, site as readSite, tierOf,
 } from "../lib/registry.mjs";
+import { latestSection, renderMarkdown } from "../lib/markdown.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const site = readSite();
@@ -29,6 +30,15 @@ const npx = npxCommand(site);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const kindOfEntry = (p) => p.kind ?? kindOf(p.category); // written since the kind field became required; derived for anything older
 const status = (s) => `<span class="status status-${esc(s)}" title="${esc(STATUS_TEXT[s] ?? "")}">${esc(s)}</span>`;
+const version = (p) => (p.version ? `<span class="version" title="version">${esc(p.version.replace(/^v/, "v"))}</span>` : "");
+// What the project shipped in abc-labs/ besides the manifest, read from its cache.
+const cached = (p, key) => {
+  const rel = p.cache?.[key];
+  if (!rel) return null;
+  const file = join(projectCache(p.id), rel);
+  return existsSync(file) ? file : null;
+};
+const iconTag = (p, cls = "icon") => (cached(p, "icon") ? `<img class="${cls}" src="/${esc(p.id)}/${esc(p.cache.icon)}" alt="" width="40" height="40">` : `<span class="${cls} icon-blank" aria-hidden="true">${esc(p.name.slice(0, 1))}</span>`);
 const importCmd = (p) => `${npx} import ${p.id}`;
 
 // What a visitor does with each surface: a link they can click, or a command
@@ -74,9 +84,10 @@ function projectCard(p) {
   return `
       <article class="card" id="${esc(p.id)}" data-kind="${esc(kindOfEntry(p))}" data-category="${esc(p.category)}" data-tags="${esc((p.tags ?? []).join(" "))}" data-text="${esc([p.name, p.tagline, p.id, CATEGORIES[p.category]?.one, ...(p.tags ?? [])].join(" ").toLowerCase())}">
         <div class="card-top">
-          <div>
+          ${iconTag(p)}
+          <div class="card-title">
             <h3><a href="/${esc(p.id)}/">${esc(p.name)}</a></h3>
-            <p class="role">${esc(CATEGORIES[p.category]?.one ?? p.category)}</p>
+            <p class="role">${esc(CATEGORIES[p.category]?.one ?? p.category)}${p.version ? ` · ${version(p)}` : ""}</p>
           </div>
           ${status(p.status)}
         </div>
@@ -112,6 +123,8 @@ function projectPage(p) {
   const rows = [
     ["Status", `${status(p.status)} <span class="hint">${esc(STATUS_TEXT[p.status] ?? "")}</span>`],
     ["What it is", `${esc(CATEGORIES[p.category]?.one ?? p.category)} — ${esc(CATEGORIES[p.category]?.test ?? "")}`],
+    p.version ? ["Version", esc(p.version)] : null,
+    p.requires?.length ? ["Needs", p.requires.map(esc).join(", ")] : null,
     p.tags?.length ? ["Tags", `<div class="tags">${p.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>`] : null,
     ["Started", `<time datetime="${esc(p.started)}">${esc(p.started)}</time>${p.status === "building" ? ` — due <time datetime="${esc(alphaBy(p.started))}">${esc(alphaBy(p.started))}</time>` : ""}`],
     p.rented?.web ? ["Live at", `<a href="${esc(p.rented.web.origin)}">${esc(p.rented.web.origin.replace(/^https:\/\//, ""))}</a>`] : null,
@@ -127,6 +140,14 @@ function projectPage(p) {
   const wheres = Object.keys(SURFACES).filter((s) => p.surfaces?.[s] && !(s === "import" && p.surfaces.ai))
     .map((s) => whereBlock(p, s, p.surfaces[s])).join("\n        ");
 
+  // The project's own words, from its abc-labs/: rendered through the safe
+  // subset, so it can describe anything and execute nothing.
+  const readmeFile = cached(p, "readme");
+  const about = readmeFile ? `<div class="panel prose"><h2>About</h2>\n${renderMarkdown(readFileSync(readmeFile, "utf8"))}\n      </div>` : "";
+  const changelogFile = cached(p, "changelog");
+  const latest = changelogFile ? latestSection(readFileSync(changelogFile, "utf8")) : null;
+  const whatsNew = latest ? `<div class="panel prose"><h2>What's new <span class="hint">${esc(latest.title)}</span></h2>\n${renderMarkdown(latest.body)}\n      </div>` : "";
+
   return shell({
     here: "projects",
     title: `${p.name} — ${site.name}`,
@@ -134,7 +155,7 @@ function projectPage(p) {
     body: `
     <header class="page-hero wrap">
       <p class="eyebrow"><a href="${esc(site.companyUrl)}">${esc(site.company)}</a><span class="sep">/</span><a href="/">Labs</a><span class="sep">/</span>${esc(p.id)}</p>
-      <h1>${esc(p.name)}</h1>
+      <div class="hero-row">${iconTag(p, "icon icon-lg")}<h1>${esc(p.name)} ${version(p)}</h1></div>
       <p class="lede">${esc(p.tagline)}</p>
     </header>
     <main class="wrap">
@@ -143,6 +164,8 @@ function projectPage(p) {
         ? `<div class="panel"><h2>Not ready yet</h2><p class="note">${overdue(p) ? "Overdue." : "Due"} <time datetime="${esc(alphaBy(p.started))}">${esc(alphaBy(p.started))}</time> — fourteen days from the day it started.</p></div>`
         : wheres ? `<div class="panel"><h2>How to use it</h2>\n        ${wheres}\n      </div>` : ""}
       ${p.note && p.status !== "archived" ? `<div class="panel"><h2>Note</h2><p class="note">${esc(p.note)}</p></div>` : ""}
+      ${whatsNew}
+      ${about}
       <div class="panel"><h2>Facts</h2>
         <dl class="facts">
 ${rows.map(([k, v]) => `          <dt>${esc(k)}</dt><dd>${v}</dd>`).join("\n")}
@@ -363,6 +386,10 @@ writeFileSync(join(dist, "index.html"), indexHtml);
 for (const p of all) {
   mkdirSync(join(dist, p.id), { recursive: true });
   writeFileSync(join(dist, p.id, "index.html"), projectPage(p));
+  // The icon is the one cached file served raw — as an <img>, from this origin,
+  // never inline, so a hostile SVG cannot run here and nothing hotlinks to GitHub.
+  const icon = cached(p, "icon");
+  if (icon) copyFileSync(icon, join(dist, p.id, p.cache.icon));
 }
 for (const f of readdirSync(join(here, "static"))) copyFileSync(join(here, "static", f), join(dist, f));
 
@@ -383,6 +410,11 @@ const publicIndex = {
     surfaces: p.surfaces ?? {},
     tags: p.tags ?? [],
     license: p.license ?? null,
+    version: p.version ?? null,
+    requires: p.requires ?? [],
+    icon: cached(p, "icon") ? `${projectUrl(site, p.id)}/${p.cache.icon}` : null,
+    readme: !!cached(p, "readme"),
+    whatsNew: (() => { const f = cached(p, "changelog"); const l = f ? latestSection(readFileSync(f, "utf8")) : null; return l ? l.title : null; })(),
     status: p.status,
     started: p.started,
     repo: p.repo,

@@ -68,7 +68,9 @@ Point whoever prepares the repository — a person or the AI working in it — a
 seven questions that pick a category, and the one command that validates the
 result. No conversation needed. [CONTRACT.md](CONTRACT.md) is the reference
 behind it. In short: add `abc-labs/labs.json` with an
-`export` half to your repo, open a PR adding one line to
+`export` half to your repo — and, if you like, `README.md`, `CHANGELOG.md` and an
+`icon.svg` beside it, which become your page's story, its *What's new* and its
+icon; Labs reads that one folder and nothing else of yours — then open a PR adding one line to
 [`registry.json`](registry.json), and you are listed, with a page at
 `labs.abclegacyllc.com/<id>`. Rent `host` and Labs runs your process; rent `mcp`
 and you have an endpoint; add `install` and other repositories can take you.
